@@ -1,0 +1,1551 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>단지메이트 MVP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* VOICE: 실제로 출시된 아파트 앱처럼 차분하고 믿을 만하게
+   IDEA: 101동 단면도(Digital Twin)가 관제판이 되어, 일이 생긴 집에 불이 들어온다
+   PICTURE: 왼쪽 동 단면도, 가운데 기기 화면, 오른쪽 5층 처리 기록
+   COLOUR and TYPE: 짙은 청록 #17262B, 모래 #ECE7DD, 주황 #E2643A / IBM Plex Sans KR
+   LAYOUT: 위에 시나리오 탭, 3단(단면도, 기기, 기록), 좁으면 기기 화면이 먼저 */
+:root{color-scheme:light dark;
+--bg:light-dark(#F4F1EA,#0E191C);--panel:light-dark(#FFFFFF,#15242A);--ink:light-dark(#17262B,#EAF0EE);
+--muted:light-dark(#56635F,#A9BDBB);--line:light-dark(#DED6C7,#2C3F45);--sand:light-dark(#ECE7DD,#203238);
+--mint:light-dark(#DCE8E5,#1B3436);--dark:#17262B;--dark2:#24383E;--acc:#E2643A;--acc-ink:light-dark(#A8461F,#F28B62);
+--acc-soft:light-dark(#FBE3D8,#3A2219);--ok:light-dark(#2F7552,#79D2A3);--ok-soft:light-dark(#E1F1E7,#173226);--warn:light-dark(#8A5A00,#F2C46B)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 'IBM Plex Sans KR','Apple SD Gothic Neo','Noto Sans KR',sans-serif;overflow-x:clip;word-break:keep-all}
+button,input,select{font:inherit;color:inherit}
+h1,h2,h3,p{margin:0}
+.top{background:var(--dark);color:#EAF0EE;padding:14px max(3vw,16px);display:flex;flex-wrap:wrap;gap:12px 28px;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.brand h1{font-size:22px;font-weight:700;letter-spacing:-.3px}
+.brand span{font-size:14px;color:#A9BDBB}
+.meters{display:flex;gap:18px;flex-wrap:wrap}
+.meter{display:grid;gap:4px;min-width:170px}
+.meter b{font-size:13px;font-weight:600;color:#A9BDBB;display:flex;justify-content:space-between;gap:10px}
+.meter b em{font-style:normal;color:#F28B62}
+.bar{height:6px;border-radius:6px;background:#2C3F45;overflow:hidden}.bar i{display:block;height:100%;background:var(--acc);transition:width .4s}
+.tabs{display:flex;gap:8px;padding:12px max(3vw,16px);overflow-x:auto;background:var(--panel);border-bottom:1px solid var(--line)}
+.tab{flex:none;border:1px solid var(--line);background:var(--bg);border-radius:40px;padding:9px 16px;cursor:pointer;font-weight:600;font-size:14px;min-height:44px}
+.tab small{color:var(--muted);font-weight:500;margin-right:6px}
+.tab[aria-selected=true]{background:var(--acc);border-color:var(--acc);color:#17262B}.tab[aria-selected=true] small{color:#17262B}
+.tab.done::after{content:" ✓";color:var(--ok)}.tab[aria-selected=true].done::after{color:#17262B}
+main{display:grid;grid-template-columns:minmax(250px,300px) minmax(0,1fr) minmax(280px,340px);gap:18px;padding:18px max(3vw,16px) 28px;align-items:start}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px}
+.card>h2{font-size:15px;font-weight:700;margin-bottom:10px;display:flex;justify-content:space-between;gap:8px}
+.card>h2 small{font-weight:500;color:var(--muted)}
+/* building */
+.bld{display:grid;gap:4px;background:var(--sand);border-radius:12px;padding:10px 10px 0;position:relative}
+.roof{height:10px;margin:-10px -10px 6px;border-radius:12px 12px 0 0;background:var(--dark)}
+.fl{display:grid;grid-template-columns:34px repeat(4,minmax(0,1fr));gap:4px;align-items:center}
+.fn{font-size:12px;color:var(--muted);text-align:right;padding-right:2px}
+.cell{position:relative;height:30px;border-radius:6px;border:1px solid var(--line);background:var(--panel);font-size:12px;font-weight:600;cursor:pointer;padding:0;color:var(--muted)}
+.cell .dot{position:absolute;right:4px;top:4px;width:6px;height:6px;border-radius:50%;background:var(--ok)}.cell .dot.off{background:#B9B2A4}
+.cell.empty{background:transparent;border-style:dashed;color:var(--line)}
+.cell.me{border:2px solid var(--acc);color:var(--ink)}
+.cell.nb{background:var(--mint);color:var(--ink)}
+.cell.src{background:var(--acc);border-color:var(--acc);color:#17262B}
+.cell.tgt{background:var(--dark);border-color:var(--dark);color:#EAF0EE}
+.cell.pulse{animation:pulse 1.2s ease-in-out 3}
+.cell.smoke{background:light-dark(#E9E4F2,#2A2638);color:var(--ink)}
+.cell.gone{background:transparent;border:1px dashed var(--muted);color:var(--muted);text-decoration:line-through}
+@keyframes pulse{50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--acc) 35%,transparent)}}
+.ground{height:12px;margin:6px -10px 0;background:var(--dark2);border-radius:0 0 12px 12px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:10px;font-size:12px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.sw{width:12px;height:12px;border-radius:3px;border:1px solid var(--line);display:inline-block}
+.uinfo{margin-top:12px;border-top:1px solid var(--line);padding-top:10px;font-size:13px}
+.uinfo b{font-size:14px}.uinfo p{color:var(--muted)}
+/* stage */
+.shead{display:grid;gap:8px;margin-bottom:14px}
+.shead h2{font-size:clamp(22px,2.4vw,30px);line-height:1.15;letter-spacing:-.4px;text-wrap:balance}
+.shead p{color:var(--muted);max-width:70ch}
+.meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.steps{display:flex;flex-wrap:wrap;gap:6px;counter-reset:st}
+.step{font-size:13px;font-weight:600;padding:5px 12px;border-radius:40px;background:var(--sand);color:var(--muted);counter-increment:st}
+.step::before{content:counter(st) " ";color:var(--acc-ink)}
+.step.on{background:var(--ok-soft);color:var(--ok)}.step.on::before{color:var(--ok)}
+.pill{font-size:12px;font-weight:600;padding:4px 10px;border-radius:40px;border:1px solid var(--line);color:var(--muted)}
+.ctrl{display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:0;background:var(--acc);color:#17262B;font-weight:700;border-radius:12px;padding:10px 16px;cursor:pointer;min-height:44px}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink);font-weight:600}
+.btn.dk{background:var(--dark);color:#EAF0EE}
+.btn.sm{min-height:36px;padding:6px 12px;font-size:13px;border-radius:10px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn:focus-visible,.tab:focus-visible,.cell:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.screens{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;align-items:start}
+.dev{background:var(--panel);border:1px solid var(--line);border-radius:18px;overflow:hidden;display:flex;flex-direction:column}
+.dev>header{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);font-size:14px}
+.dev>header .k{font-size:11px;font-weight:700;padding:2px 8px;border-radius:40px;background:var(--sand);color:var(--muted)}
+.dev.robot>header .k{background:var(--mint);color:var(--ink)}
+.dev.wall>header,.dev.ops>header{background:var(--dark);color:#EAF0EE;border-color:var(--dark)}
+.dev.wall>header .k,.dev.ops>header .k{background:var(--dark2);color:#A9BDBB}
+.dev.office>header .k{background:var(--acc-soft);color:var(--acc-ink)}
+.db{padding:14px;display:grid;gap:10px}
+.face{display:flex;gap:18px;justify-content:center;padding:10px 0 4px}
+.face i{width:14px;height:22px;border-radius:8px;background:var(--dark);display:block;animation:blink 4s infinite}
+:root[data-theme=dark] .face i{background:#EAF0EE}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) .face i{background:#EAF0EE}}
+@keyframes blink{0%,94%,100%{transform:scaleY(1)}97%{transform:scaleY(.1)}}
+.chat{display:grid;gap:6px;max-height:300px;overflow-y:auto;padding-right:2px}
+.msg{padding:8px 12px;border-radius:14px;max-width:92%;font-size:14px}
+.msg.me{justify-self:end;background:var(--acc-soft);border-bottom-right-radius:4px}
+.msg.bot{justify-self:start;background:var(--sand);border-bottom-left-radius:4px}
+.msg small{display:block;color:var(--muted);font-size:12px}
+label{display:grid;gap:4px;font-size:13px;font-weight:600;color:var(--muted)}
+input,select{font-size:16px;border:1px solid var(--line);border-radius:10px;padding:9px 11px;background:var(--bg);min-height:42px;font-weight:500;color:var(--ink)}
+input[type=range]{padding:0;min-height:32px;accent-color:var(--acc)}
+.chk{display:flex;align-items:center;gap:8px;font-weight:500;color:var(--ink);font-size:14px}
+.chk input{min-height:0;width:20px;height:20px;accent-color:var(--acc)}
+fieldset{border:1px solid var(--line);border-radius:12px;padding:8px 10px 10px;display:grid;gap:6px;margin:0}
+legend{font-size:13px;font-weight:600;color:var(--muted);padding:0 4px}
+.row2{display:grid;grid-template-columns:1.3fr 1fr;gap:6px}
+.state{font-weight:600;padding:8px 12px;border-radius:10px;font-size:14px}
+.state.ok{background:var(--ok-soft);color:var(--ok)}.state.wait{background:var(--sand);color:var(--muted)}.state.warn{background:var(--acc-soft);color:var(--acc-ink)}
+.hint{font-size:13px;color:var(--muted)}.err{font-size:13px;color:var(--acc-ink);font-weight:600}
+.list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.list li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:var(--bg);font-size:14px}
+.list small{color:var(--muted)}.okc{color:var(--ok);font-size:13px}
+.notice{border-radius:14px;padding:12px 14px;background:var(--dark);color:#EAF0EE;display:grid;gap:6px}
+.notice small{color:#A9BDBB;font-size:12px}.notice p{font-size:15px;line-height:1.5}
+.notice.official{background:var(--acc-soft);color:var(--ink)}.notice.official small{color:var(--acc-ink)}
+.idle{color:var(--muted);font-size:14px;text-align:center;padding:18px 0}
+.clock{font-size:34px;font-weight:700;text-align:center;letter-spacing:1px}
+.tl{list-style:none;margin:0;padding:0;display:grid;gap:0}
+.tl li{display:grid;grid-template-columns:16px 1fr auto;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px}
+.tl li:last-child{border:0}
+.tl i{width:10px;height:10px;border-radius:50%;background:var(--line)}
+.tl .done i{background:var(--ok)}.tl .hold i,.tl .unsure i{background:var(--warn)}.tl .esc i{background:var(--acc)}
+.tl em{font-style:normal;font-size:12px;color:var(--muted)}
+.opts{display:grid;gap:6px}
+.opts .btn{text-align:left}
+.seg{display:flex;gap:4px;flex-wrap:wrap}
+.seg button{border:1px solid var(--line);background:var(--bg);border-radius:40px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer;min-height:36px}
+.seg button[aria-pressed=true]{background:var(--dark);color:#EAF0EE;border-color:var(--dark)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{border:1px solid var(--line);background:var(--bg);border-radius:40px;padding:6px 12px;font-size:13px;cursor:pointer;min-height:36px}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th,.tbl td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--line)}
+.tbl th{color:var(--muted);font-weight:600}
+.tbl td.n{text-align:right;font-variant-numeric:tabular-nums}
+.sw2{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.tog{width:52px;height:30px;border-radius:30px;border:0;background:var(--line);position:relative;cursor:pointer;flex:none}
+.tog::after{content:"";position:absolute;left:4px;top:4px;width:22px;height:22px;border-radius:50%;background:#fff;transition:left .2s}
+.tog[aria-pressed=true]{background:var(--ok)}.tog[aria-pressed=true]::after{left:26px}
+.plan{border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:6px;background:var(--bg)}
+.plan[data-on=true]{border:2px solid var(--acc)}
+.plan h3{font-size:15px}.plan p{font-size:13px;color:var(--muted)}
+.sl{display:grid;gap:2px}.sl output{font-size:22px;font-weight:700;color:var(--ink)}
+/* log */
+.log{position:sticky;top:12px;max-height:calc(100vh - 24px);display:flex;flex-direction:column}
+.loglist{list-style:none;margin:0;padding:0;display:grid;gap:6px;overflow-y:auto;flex:1;min-height:120px}
+.loglist li{display:grid;grid-template-columns:26px 1fr;gap:8px;padding:8px;border-radius:10px;background:var(--bg);font-size:13px;animation:in .35s ease both}
+@keyframes in{from{opacity:0;transform:translateY(-6px)}}
+.lb{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-weight:700;font-size:14px}
+.L1 .lb{background:var(--sand)}.L2 .lb{background:var(--mint)}.L3 .lb{background:var(--dark);color:#EAF0EE}.L4 .lb{background:var(--acc);color:#17262B}.L5 .lb{border:1px solid var(--line)}
+.loglist b{font-family:ui-monospace,'SFMono-Regular',Menlo,monospace;font-size:12px;font-weight:600;word-break:break-all}
+.loglist p{color:var(--muted);font-size:13px}
+.tag{font-size:11px;font-weight:700;border-radius:40px;padding:1px 7px;margin-left:6px;white-space:nowrap}
+.tag.real{background:var(--ok-soft);color:var(--ok)}.tag.demo{background:var(--sand);color:var(--muted)}
+.logempty{color:var(--muted);font-size:13px;padding:10px 4px}
+.cov{border-top:1px solid var(--line);margin-top:10px;padding-top:10px;display:grid;gap:8px}
+.cov h3{font-size:13px;color:var(--muted);font-weight:600}
+.cg{display:flex;flex-wrap:wrap;gap:4px}
+.cg span{font-size:11px;padding:2px 7px;border-radius:40px;background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+.cg span.on{background:var(--ok-soft);color:var(--ok);border-color:transparent;font-weight:600}
+.note{font-size:12px;color:var(--muted);padding:0 max(3vw,16px) 24px}
+.caps{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.cap{font-size:12px;font-weight:600;padding:3px 9px;border-radius:40px;background:#2C3F45;color:#A9BDBB}.cap.on{background:#173226;color:#79D2A3}
+.camdock{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:16px;align-items:start;background:var(--dark);color:#EAF0EE;border-radius:18px;padding:14px;margin-bottom:14px}
+.camdock[hidden]{display:none}
+.camwrap{position:relative;border-radius:12px;overflow:hidden;background:#000;aspect-ratio:4/3}
+.camwrap video,.camwrap canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.camwrap video{transform:scaleX(-1)}
+.camside{display:grid;gap:8px;align-content:start}.camside b{font-size:16px}#camt{font-size:18px;font-weight:600;color:#F28B62}
+label.btn{display:inline-flex;align-items:center;justify-content:center;color:#17262B;font-size:15px}label.btn.ghost{color:var(--ink)}
+@media(max-width:760px){.camdock{grid-template-columns:minmax(0,1fr)}}
+/* 발표 모드 */
+#present{position:fixed;inset:0;z-index:50;background:radial-gradient(120% 90% at 50% 0%,#24383E 0%,#0E191C 72%);color:#EAF0EE;display:grid;grid-template-rows:auto auto minmax(0,1fr);overflow:hidden}
+#present[hidden]{display:none}
+.pbar{display:flex;justify-content:space-between;align-items:center;padding:18px 36px;gap:12px}
+.pbar b{font-size:18px;letter-spacing:-.2px}.pbar small{color:#A9BDBB;font-size:14px;margin-left:10px}
+.pstage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) minmax(0,1fr);gap:32px;align-items:center;padding:0 44px;min-height:0}
+.pcol{display:grid;gap:14px;justify-items:center;align-content:center}
+.plab{font-size:14px;font-weight:600;color:#A9BDBB}
+.rbody{width:min(100%,280px);aspect-ratio:1/1.02;border-radius:46% 46% 40% 40%;background:linear-gradient(160deg,#F6F4EF,#CFC8BA);box-shadow:0 34px 70px #000a,inset 0 -12px 30px #0002;display:grid;place-items:center}
+.rscreen{width:72%;aspect-ratio:1.6;border-radius:30px;background:#0E191C;display:flex;gap:22%;justify-content:center;align-items:center}
+.rscreen i{width:12%;aspect-ratio:.62;border-radius:20px;background:#79D2A3;animation:blink 4s infinite}
+.rscreen.alert i{background:#F28B62}
+.pbub{display:grid;gap:8px;width:min(100%,340px)}
+.pbub .m{padding:10px 14px;border-radius:16px;font-size:16px;line-height:1.45;animation:in .4s ease both}
+.pbub .me{background:#4A2A1D;color:#FBE3D8;justify-self:end;border-bottom-right-radius:4px}
+.pbub .bot{background:#EAF0EE;color:#17262B;justify-self:start;border-bottom-left-radius:4px}
+.pcenter{width:100%;background:#15242AD9;border:1px solid #2C3F45;border-radius:24px;padding:28px;min-height:360px;display:grid;gap:14px;align-content:center;animation:in .45s ease both}
+.pcenter h3{font-size:14px;color:#F28B62;font-weight:700}
+.pcenter .bigt{font-size:clamp(30px,3.4vw,48px);font-weight:700;line-height:1.12;letter-spacing:-.5px}
+.pcenter .sub{font-size:17px;color:#C9D6D4;line-height:1.5}
+.pchips{display:flex;gap:8px;flex-wrap:wrap}.pchips span{font-size:13px;font-weight:600;padding:5px 12px;border-radius:40px;background:#24383E;color:#C9D6D4}.pchips span.ok{background:#173226;color:#79D2A3}
+.mb{display:grid;gap:8px}.mb .u{display:grid;grid-template-columns:64px 1fr;gap:12px;align-items:center;border-radius:12px;padding:10px 14px;background:#1E3036;font-size:15px}
+.mb .u b{font-size:16px}.mb .u.src{background:#E2643A;color:#17262B}.mb .u.me{box-shadow:inset 0 0 0 2px #E2643A}
+.gauge{position:relative;height:20px;border-radius:20px;background:#24383E;margin:26px 0 8px}
+.gauge i{display:block;height:100%;border-radius:20px;background:#E2643A}
+.gauge em{position:absolute;top:-10px;bottom:-10px;width:3px;background:#EAF0EE}
+.gauge em::after{content:attr(data-l);position:absolute;top:-24px;left:50%;transform:translateX(-50%);font-style:normal;font-size:13px;white-space:nowrap;color:#EAF0EE}
+.ba .b{font-size:16px;color:#A9BDBB;text-decoration:line-through}.ba .a{font-size:18px;line-height:1.55;background:#EAF0EE;color:#17262B;border-radius:14px;padding:14px 16px}
+.pwall{width:min(100%,340px);background:#0B1316;border-radius:22px;padding:14px;box-shadow:0 34px 70px #000a;border:1px solid #2C3F45}
+.pwall .scr{background:#F6F4EF;color:#17262B;border-radius:12px;min-height:280px;padding:16px;display:grid;gap:10px;align-content:start}
+.pwall .hd{display:flex;justify-content:space-between;font-size:13px;color:#56635F;font-weight:600}
+.pwall .clk{font-size:44px;font-weight:700;text-align:center;margin-top:34px}.pwall .idl{text-align:center;color:#56635F;font-size:14px}
+.pwall .msgc{background:#17262B;color:#EAF0EE;border-radius:12px;padding:12px 14px;font-size:15px;line-height:1.55;animation:in .5s ease both}
+.pwall .msgc small{display:block;color:#A9BDBB;font-size:12px;margin-bottom:4px}
+.pwall .rep{background:#E1F1E7;color:#2F7552;border-radius:10px;padding:9px 12px;font-size:14px;font-weight:600;animation:in .5s ease both}
+.pcap{padding:14px 40px 26px;display:grid;gap:12px;justify-items:center;text-align:center}
+.pcap p{font-size:clamp(20px,2.2vw,28px);font-weight:600;max-width:62ch;text-wrap:balance;min-height:1.4em}
+.pdots{display:flex;gap:6px}.pdots i{width:30px;height:5px;border-radius:5px;background:#2C3F45}.pdots i.on{background:#E2643A}
+.pctl{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+#present .btn.ghost{color:#EAF0EE;border-color:#3A4F55}
+@media(max-width:900px){#present{overflow:auto}.pstage{grid-template-columns:minmax(0,1fr);padding:0 18px}.pcenter{min-height:0}}
+.dtabs{display:flex;gap:6px;flex-wrap:wrap}
+.dtabs button{border:1px solid #3A4F55;background:transparent;color:#EAF0EE;border-radius:40px;padding:8px 18px;font-weight:600;font-size:15px;cursor:pointer;min-height:42px}
+.dtabs button[aria-pressed=true]{background:#E2643A;border-color:#E2643A;color:#17262B}
+.dsub{display:flex;gap:6px;justify-content:center;padding:0 0 6px}
+.dsub button{border:0;background:#1E3036;color:#C9D6D4;border-radius:40px;padding:7px 16px;font-size:14px;font-weight:600;cursor:pointer;min-height:38px}
+.dsub button[aria-pressed=true]{background:#EAF0EE;color:#17262B}
+.dsub{align-items:center;flex-wrap:wrap}.dsep{width:1px;height:22px;background:#3A4F55;margin:0 8px}.dlab{font-size:13px;color:#A9BDBB;margin-right:2px}
+.dsub button.dcase[aria-pressed=true]{background:#E2643A;color:#17262B}
+.arow.sl2{font-size:13px;padding:9px 10px;align-items:center}.arow.sl2 b{white-space:nowrap}.arow.sl2 em{font-style:normal;font-size:11px;font-weight:700;color:#A8461F;background:#FBE3D8;border-radius:20px;padding:1px 7px;margin-left:4px}
+.pbub .m small{display:block;font-size:12px;opacity:.7;margin-top:2px}
+.pchk{display:flex;align-items:center;gap:10px;font-size:15px;background:#fff;border:1px solid #DED6C7;border-radius:10px;padding:10px 12px;color:#17262B}
+.pchk input{width:20px;height:20px;accent-color:#E2643A;min-height:0}
+.asec{display:grid;gap:8px;padding-bottom:10px;border-bottom:1px solid #DED6C7}.asec:last-child{border:0}
+.asec h4{font-size:13px;color:#56635F;margin:0}
+.arow .tog{width:46px;height:26px}.arow .tog::after{width:18px;height:18px}.arow .tog[aria-pressed=true]::after{left:24px}
+.padmin.wide{width:min(100%,440px)}
+.tog.nx{animation:nx 1.6s ease-in-out infinite}
+#present .pstage.d{grid-template-columns:repeat(auto-fit,minmax(240px,320px));justify-content:center;align-items:center;gap:24px;padding:10px 32px 30px;overflow:auto}
+.pphone{width:min(100%,300px);height:min(560px,66vh);background:#0B1316;border-radius:40px;padding:12px;box-shadow:0 34px 70px #000a;border:1px solid #2C3F45;position:relative;display:flex}
+.pphone .notch{position:absolute;top:12px;left:50%;transform:translateX(-50%);width:34%;height:22px;background:#0B1316;border-radius:0 0 14px 14px;z-index:1}
+.pscr{flex:1;background:#F6F4EF;color:#17262B;border-radius:30px;padding:42px 18px 18px;display:grid;gap:12px;align-content:start;overflow:auto}
+.ptitle{font-size:18px;font-weight:700}
+.ptl{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.ptl li{display:flex;align-items:center;gap:10px;font-size:15px;color:#7A8682}
+.ptl i{width:12px;height:12px;border-radius:50%;background:#CFC8BA;flex:none}
+.ptl li.ok{color:#17262B;font-weight:600}.ptl li.ok i{background:#2F7552}.ptl li.hold i{background:#C98A1A}
+.pnote{font-size:13px;color:#56635F}
+.pok{font-size:14px;font-weight:700;color:#2F7552;background:#E1F1E7;border-radius:10px;padding:9px 12px;animation:in .4s ease both}
+.pbig{font-size:28px;font-weight:700;letter-spacing:1px}
+.pmsg{font-size:15px;line-height:1.55;background:#fff;border-radius:12px;padding:12px;border:1px solid #DED6C7;animation:in .4s ease both}
+.plb{display:grid;gap:4px;font-size:13px;font-weight:600;color:#56635F}
+.plb input{font-size:16px;min-height:44px;border-radius:10px;border:1px solid #CFC8BA;background:#fff;color:#17262B;padding:8px 10px}
+.padmin{width:min(100%,360px);background:#0B1316;border-radius:16px;padding:10px;box-shadow:0 34px 70px #000a;border:1px solid #2C3F45}
+.padmin .ahd{font-size:13px;font-weight:700;color:#A9BDBB;padding:4px 6px 10px}
+.padmin .abody{background:#F6F4EF;color:#17262B;border-radius:10px;min-height:240px;padding:16px;display:grid;gap:10px;align-content:start}
+.arow{display:flex;justify-content:space-between;gap:10px;font-size:15px;background:#fff;border:1px solid #DED6C7;border-radius:10px;padding:10px 12px;animation:in .4s ease both}
+.ropts{display:grid;gap:6px}
+#present .pscr .btn.ghost,#present .pwall .btn.ghost,#present .abody .btn.ghost{color:#17262B;border-color:#CFC8BA;background:#fff;text-align:left}
+#present .pctl .btn.ghost{color:#EAF0EE;border-color:#3A4F55;background:transparent}
+.msgc.off{background:#FBE3D8!important;color:#17262B!important}.msgc.off small{color:#A8461F!important}
+.btn.nx{animation:nx 1.6s ease-in-out infinite}
+@keyframes nx{50%{box-shadow:0 0 0 7px rgba(226,100,58,.35)}}
+body.demo #camdock{position:fixed;right:24px;bottom:24px;z-index:60;width:min(560px,92vw);margin:0;box-shadow:0 20px 60px #000c}
+body.demo{overflow:hidden}
+.tab em.lock{background:var(--sand);color:var(--muted)}
+.core{font-style:normal;font-size:11px;font-weight:700;background:var(--dark);color:#EAF0EE;border-radius:40px;padding:1px 7px;margin-left:6px}
+.role{font-size:12px;font-weight:700;padding:4px 10px;border-radius:40px;background:var(--dark);color:#EAF0EE}
+.role.sup{background:var(--mint);color:var(--ink)}.role.ext{background:var(--sand);color:var(--muted)}
+.mvgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;align-items:start}
+.mvc{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px;display:grid;gap:10px;align-content:start}
+.mvc h3{font-size:16px}.mvc .k{font-size:12px;font-weight:700;color:var(--acc-ink)}
+.mvc.hyp{background:var(--dark);color:#EAF0EE;border-color:var(--dark)}.mvc.hyp .k{color:#F28B62}
+.mvc.hyp .big{font-size:18px;line-height:1.5;font-weight:500}
+.hypk{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:14px;margin:0}.hypk dt{color:#A9BDBB}.hypk dd{margin:0}
+.fl2{list-style:none;margin:0;padding:0;display:grid;gap:6px;counter-reset:f}
+.fl2 li{counter-increment:f;display:grid;grid-template-columns:26px 1fr;gap:8px;padding:8px 10px;border-radius:10px;background:var(--bg);font-size:14px}
+.fl2 li::before{content:counter(f);width:24px;height:24px;border-radius:50%;background:var(--acc);color:#17262B;font-weight:700;display:grid;place-items:center;font-size:13px}
+.fl2 small{display:block;color:var(--muted);font-size:12px}
+.kr{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.kr b{font-size:14px}.kr strong{font-size:20px;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.kr small{grid-column:1/-1;color:var(--muted);font-size:12px}.kr .bar{grid-column:1/-1;background:var(--sand)}
+.cnt{font-size:12px;color:var(--muted)}
+.verdict{border-radius:14px;padding:14px;display:grid;gap:4px}.verdict b{font-size:20px}.verdict p{font-size:14px}
+.v-go{background:var(--ok-soft);color:var(--ok)}.v-fix{background:var(--acc-soft);color:var(--acc-ink)}.v-stop{background:var(--dark);color:#EAF0EE}.v-wait{background:var(--sand);color:var(--muted)}
+.rule{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;font-size:14px;padding:6px 0;border-bottom:1px solid var(--line)}
+.rule input{width:84px;min-height:36px;padding:4px 8px}.rule em{font-style:normal;font-size:12px;color:var(--muted);display:block}
+@media(max-width:1180px){main{grid-template-columns:minmax(240px,280px) minmax(0,1fr)}.log{grid-column:1/-1;position:static;max-height:none}.loglist{max-height:420px}}
+@media(max-width:760px){main{grid-template-columns:minmax(0,1fr)}.stage{order:-1}.meter{min-width:140px}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><h1>단지메이트 MVP</h1><span>아파트 단지 AI 컴패니언 플랫폼 · 층간소음 가설 검증 MVP와 시나리오 5개</span></div>
+  <div class="meters" id="meters"></div>
+  <button type="button" class="btn sm" data-act="demo.open">시연 화면</button>
+</header>
+<div id="present" hidden role="dialog" aria-label="발표 모드"></div>
+<nav class="tabs" id="tabs" role="tablist" aria-label="시나리오"></nav>
+<main>
+  <section class="card twin" aria-label="101동 단면도">
+    <h2>101동 Digital Twin <small>3~12층</small></h2>
+    <div class="bld" id="bld"></div>
+    <div class="legend">
+      <span><i class="sw" style="border:2px solid var(--acc)"></i>우리 집</span>
+      <span><i class="sw" style="background:var(--acc)"></i>상대 세대</span>
+      <span><i class="sw" style="background:var(--mint)"></i>후보</span>
+      <span><i class="sw" style="background:var(--ok);border-radius:50%"></i>로봇 연결</span>
+    </div>
+    <div class="uinfo" id="uinfo"><p>세대를 누르면 로봇, 동의, 알림 설정이 보여요.</p></div>
+  </section>
+  <section class="stage" aria-live="polite">
+    <div class="shead" id="shead"></div>
+    <div class="camdock" id="camdock" hidden><div class="camwrap"><video id="camv" playsinline muted></video><canvas id="camc"></canvas></div><div class="camside"><b>로봇 카메라</b><p id="camt">카메라 켜는 중…</p><p class="hint" style="color:#A9BDBB">TinyFaceDetector(Tiny YOLO v2 기반)로 얼굴을 찾고, 얼굴 특징값 128개를 등록된 가족과 비교해요. 영상은 이 노트북 밖으로 나가지 않아요.</p><button type="button" class="btn ghost sm" data-act="cam.close" style="color:#EAF0EE;border-color:#3A4F55">카메라 끄기</button></div></div>
+    <div class="screens" id="screens"></div>
+  </section>
+  <aside class="card log" aria-label="5층 처리 기록">
+    <h2>5층 처리 기록 <small><span class="tag real">실제 로직</span><span class="tag demo">예시</span></small></h2>
+    <ul class="loglist" id="log"></ul>
+    <div class="cov" id="cov"></div>
+  </aside>
+</main>
+<p class="note">시연용 MVP입니다. 세대, 측정값, 날씨와 공지, 가상 주민 신고는 예시 데이터이고, 음성 인식과 센서 입력은 정해 둔 값으로 대신합니다. 상대 세대 판별, 소음 기준 확인, 차량 조회, 반복 횟수, 선제 알림 시각, 동의와 알림 경로는 화면 안에서 실제로 계산합니다. 얼굴 인식, 음성 인식, 블루투스 연결은 VS Code Live Server처럼 localhost 주소를 크롬으로 열면 실제로 동작합니다.</p>
+<script src="lib/face-api.js"></script>
+<script>
+{
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const pad=n=>String(n).padStart(2,'0');
+const sec=t=>{const [h,m,s=0]=t.split(':').map(Number);return h*3600+m*60+s};
+const fmt=s=>[Math.floor(s/3600)%24,Math.floor(s%3600/60),s%60].map(pad).join(':');
+const hm=m=>`${pad(Math.floor(m/60)%24)}:${pad(m%60)}`;
+const limitOf=t=>{const h=+t.split(':')[0];const night=h>=22||h<6;return {night,limit:night?34:39}};
+const norm=p=>p.replace(/\s/g,'');
+const pretty=p=>p.replace(/^(\d{2,3}[가-힣])(\d{4})$/,'$1 $2');
+const DEV={robot:'로봇 음성',wallpad:'월패드',app:'앱'};
+const LY='①②③④⑤';
+const FEAT=[[1,'세대·주민 등록'],[2,'얼굴·목소리 등록'],[3,'서비스별 동의'],[4,'기기 연결·관리'],[5,'알림 기기 설정'],[6,'로봇과 대화'],[7,'외부 정보 연동'],[8,'입주·이사 관리'],[9,'단지 운영·구독'],[10,'층간소음 중재'],[11,'층간흡연 중재'],[12,'이중주차 호출'],[13,'상대 세대 판별'],[14,'순화·익명 전달'],[15,'답장·처리 상태'],[16,'선제 알림'],[17,'관리사무소 이관·신고'],[18,'약 복용 알림'],[19,'병원 예약'],[20,'응급 연락'],[21,'손주 사진 추천'],[22,'가족 일정'],[23,'감정 조절'],[24,'고향 생각'],[25,'음식 추천'],[26,'휴일 여가']];
+const TECH=['Wake Word','Face Recognition','Speaker Recognition','Edge LLM','Privacy Filter','Memory Graph','RAG','Family Knowledge Graph','Digital Twin','Emotion AI','Voice Clone','Healthcare Family Cloud'];
+const LINES=['01','02','03','04'],TOP=12,BOT=3;
+const SCN=[
+ {t:'입주 첫날',d:'새로 입주한 803호가 앱으로 세대를 등록하고, 관리사무소 승인을 받고, 블루투스로 로봇을 연결하고, 가족 얼굴을 등록한다. 여기서 넣은 가족, 차량, 동의, 알림 기기가 시나리오 2~4에 그대로 쓰인다.',steps:['세대 등록','입주 승인','로봇 연결','얼굴·목소리','서비스 동의','알림 기기'],f:[1,2,3,4,5,8],uc:'UC-01~06, UC-08'},
+ {t:'신고와 중재 (밤 11시)',d:'그래도 소음이 나면 803호 주민이 로봇에게 말로 신고한다. 이웃 로봇 기록으로 소리 난 집을 확정, 추정, 불확실로 나누고, 기준을 넘었는지 확인한 뒤 주민이 문구를 확인하면 전한다. 같은 집과 반복되면 주민이 관리사무소에 정식 신고한다.',steps:['말로 신고','상대 세대 판별','기준 확인','확인 후 전달','답장'],f:[10,13,14,15],uc:'UC-15, 18~21, 24'},
+ {t:'베란다로 들어온 담배 연기',d:'803호 로봇이 연기를 감지하면 주민에게 알릴지 묻고, 같은 라인의 PM2.5 상승 시각과 폭을 아래층부터 대조해 확정, 추정, 불확실로 나눈다. 같은 집이 반복되면 주민이 관리사무소에 정식 신고하고, 관리사무소가 공동주택관리법 제20조의2에 따라 중단을 권고한다.',steps:['연기 감지','같은 라인 판별','순화 전달','주민 정식 신고','중단 권고'],f:[11,13,14,17],uc:'UC-16, 18, 19, 25~27'},
+ {t:'출근길 이중주차',d:'앞차 번호를 넣으면 등록 차량과 대조해 차주 세대를 확정, 추정, 불확실로 나눈다. 확정되면 이동을 요청하고, 답이 없거나 같은 차가 반복되면 관리사무소로 넘긴다.',steps:['앞차 번호','차주 조회','이동 요청','답장'],f:[12,13,14,15],uc:'UC-17~21'},
+ {t:'신고 전 미리 알림',d:'신고가 생기기 전에 우리 집에 먼저 알린다. 아랫집이 잘 시간이 다가오거나 우리 집 소리가 기준을 넘으면 로봇이 말해 준다.',steps:['아랫집 잘 시간','우리 집 소음 경고'],f:[16],uc:'UC-22, 23'},
+ {t:'로봇과 하루, 단지 운영',d:'아침에 주민은 "단지야"로 로봇을 불러 대화하고, 플랫폼 운영자는 단지를 등록하고 서비스와 구독, 기기를 관리하고, 관리사무소는 이사 세대를 정리한다.',steps:['로봇과 대화','외부 정보','단지 운영','구독','기기 상태','이사 정리'],f:[4,6,7,8,9],uc:'UC-07, 09~14'},
+ {t:'층간소음 한 흐름으로 가설 검증',d:'가설은 하나만 확인한다. 숫자는 시나리오 2 층간소음의 신고와 중재에서 세고, 그 숫자로 계속할지, 고칠지, 멈출지 정한다.',steps:['가설','핵심 흐름','측정 지점','판단 기준'],f:[10,13,14,15],uc:'UC-15, 18~21'},
+ {t:'할머니와 손주, 가족 케어',d:'할머니와 손주가 함께 사는 803호에서 로봇이 가족을 돌본다. 약 드실 시간을 알리고, 병원을 예약하고, 가족 일정을 모아 보여 주고, 손주 생일이 가까우면 사진을 골라 주고, 위급하면 가족에게 알린다.',steps:['약 복용 알림','병원 예약','가족 일정','손주 사진','응급 연락'],f:[18,19,22,21,20],uc:'UC-28~32'},
+ {t:'혼자 사는 집의 하루',d:'혼자 사는 803호에서 로봇이 일상을 돌본다. 약 드실 시간을 알리고, 퇴근 후 지친 말투를 알아채 먼저 말을 걸고, 고향 이야기를 꺼내고, 날씨에 맞는 음식과 주말 보내는 방법을 제안한다.',steps:['약 복용 알림','감정 조절','고향 생각','음식 추천','휴일 여가'],f:[18,23,24,25,26],uc:'UC-28, 33~36'}
+];
+const TABS=[
+ {t:'가설 검증',k:'MVP',parts:[6]},
+ {t:'단지 내 로봇 활용',k:'1',parts:[0,5],role:['sup','받쳐주는 기능'],d:'803호가 입주해서 로봇을 연결하고 가족 얼굴을 등록한 뒤, 아침에 로봇과 대화한다. 관리사무소와 플랫폼 운영자는 같은 플랫폼에서 단지를 관리한다.',uc:'UC-01~14'},
+ {t:'층간소음',k:'2',pkg:'apt',parts:[4,1],role:['','MVP 핵심 흐름'],d:'소음이 생기기 전에 우리 집에 먼저 알리고, 그래도 소음이 나면 말로 신고해서 윗집을 찾아 순화해서 전하고 답장을 받는다.',uc:'UC-15, 18~24'},
+ {t:'층간흡연',k:'3',pkg:'apt',parts:[2],role:['ext','확장 후보'],uc:'UC-16, 18, 19, 25~27'},
+ {t:'이중주차',k:'4',pkg:'apt',parts:[3],role:['ext','확장 후보'],uc:'UC-17~21'},
+ {t:'헬스케어 패밀리',k:'5',pkg:'hfc',first:1,parts:[7,8],role:['ext','Healthcare Family Cloud'],d:'수업에서 받은 AI Agent 기능 9개를 한 시나리오에서 쓴다. 같은 로봇이 가족이 함께 사는 집과 혼자 사는 집에서 각각 다르게 일한다.',uc:'UC-28~36'}
+];
+const tabOf=c=>TABS.findIndex(t=>t.parts.includes(c));
+let S,cur=6,autoOn=false,seed=7;
+const freshM=()=>({attempts:0,accepted:0,judged:0,unsure:0,held:0,delivered:0,replied:0,rt:[],re:0,sim:0,live:0,pairs:new Set()});
+
+function house(){
+ const H={};
+ for(let f=BOT;f<=TOP;f++)for(const l of LINES){const id=`${f}${l}`;H[id]={id,registered:true,robot:(f+ +l)%3!==0,online:true,consent:{noise:true,smoke:true,parking:true},notify:['wallpad'],sleep:'23:00',kids:false,vehicles:[],members:[]}}
+ Object.assign(H['903'],{robot:true,kids:true,notify:['wallpad','robot'],sleep:'22:30',members:[{n:'',r:'아빠'},{n:'',r:'엄마'},{n:'',r:'아이'},{n:'',r:'아이'}]});
+ Object.assign(H['703'],{robot:true,notify:['robot','wallpad'],sleep:'21:30'});
+ Object.assign(H['603'],{robot:true,notify:['wallpad','app']});
+ Object.assign(H['1203'],{robot:true,notify:['app','robot'],vehicles:['12가3456']});
+ Object.assign(H['502'],{vehicles:['56다1020']});
+ Object.assign(H['802'],{robot:true});Object.assign(H['804'],{robot:true});
+ H['1002'].online=false;H['404'].online=false;
+ Object.assign(H['1104'],{robot:true,moving:true});
+ H['803']={id:'803',registered:false,status:'none',robot:false,online:false,consent:{noise:true,smoke:true,parking:true,health:false,album:false},notify:['robot','app'],sleep:'23:00',kids:true,vehicles:[],members:[]};
+ return H;
+}
+function scnState(n){
+ return [
+  ()=>({members:[{n:'이서연',r:'엄마'},{n:'김도윤',r:'아빠'},{n:'김하린',r:'딸, 7살'}],pair:'4821',faces:{},consentDone:false,notifyDone:false,err:''}),
+  ()=>({time:'23:04',case:'sure',text:'단지야, 윗집 또 쿵쿵거려. 진짜 짜증나 죽겠네',speaker:0,voice:true,busy:false,chat:[],status:{},msg:null,reply:null,src:null,lv:null,pending:null,suggest:false,filed:false,official:null,to:[]}),
+  ()=>({case:'sure',busy:false,ask:false,chat:[],msg:null,official:null,src:null,lv:null,to:[],suggest:false,filed:false}),
+  ()=>({case:'sure',plate:'12가 3456',memo:'8시 10분까지 나가야 해요',busy:false,status:{},req:null,reply:null,owner:null,ask:null,lv:null,suggest:false,filed:false,official:null,late:false,n:0}),
+  ()=>({t:21*60+5,db:30,out:[]}),
+  ()=>({chat:[],speaker:0,tab:'complex',sub:'basic',complexes:[{name:'단지메이트 1단지',n:40}],moved:false}),
+  ()=>({}),
+  ()=>({med:{name:'혈압약',at:480,st:'idle'},chat:[],sched:[{day:0,label:'오늘',h:'16:30',t:'손주 영어 학원'},{day:2,label:'11/27',h:'18:00',t:'손주 피아노 학원'}],showSched:false,booked:false,photos:null,notified:[],sos:'idle',warn:''}),
+  ()=>({med:{name:'아침 약',at:480,st:'idle'},chat:[],notified:[],score:null,temp:6,wx:'sunny',ev:'none',warn:''})
+ ][n]();
+}
+function reset(){
+ S={pkg:{apt:true,hfc:true},H:house(),services:{noise:true,smoke:true,parking:true},N:3,hist:{'803|903|noise':1,'603|smoke':2,'1203|parking':2},reports:[],cover:new Set(),tech:new Set(),log:[],marks:[{},{},{},{},{},{},{},{},{}],prog:[0,1,2,3,4,5,6,7,8].map(()=>new Set()),sel:null,s:[0,1,2,3,4,5,6,7,8].map(scnState),m:freshM(),T:{reply:50,re:30,unsure:50}};
+}
+function resetScn(n){if(n===6){S.m=freshM();S.prog[6]=new Set();return}S.s[n]=scnState(n);S.marks[n]={};S.prog[n]=new Set();const RT={1:'noise',2:'smoke',3:'parking'}[n];if(RT){S.reports=S.reports.filter(r=>r.type!==RT);Object.assign(S.hist,{1:{'803|903|noise':1},2:{'603|smoke':2},3:{'1203|parking':2}}[n])}if(n===0){S.H['803']=house()['803'];FACE.db=[]}}
+const st=n=>S.s[n];
+function log(l,c,m,tag='real'){S.log.unshift({l,c,m,tag});if(S.log.length>80)S.log.pop();renderLog()}
+function cover(...f){f.forEach(x=>S.cover.add(x));renderMeters()}
+function tech(...t){t.forEach(x=>S.tech.add(x));renderMeters()}
+function done(n,i){S.prog[n].add(i)}
+function mark(n,id,c){S.marks[n][id]=c}
+const H8=()=>S.H['803'];
+function ensure803(){
+ const h=H8();if(h.registered&&h.robot)return;
+ Object.assign(h,{registered:true,status:'approved',robot:true,online:true,members:st(0).members.map(m=>({...m})),vehicles:['34나7788'],sleep:'23:00',kids:true});
+ log(5,'HouseholdManager','시나리오 1을 건너뛰어서 803호를 데모 기본값으로 등록','demo');
+}
+function neighbors(id){
+ const f=parseInt(id.slice(0,-2)),l=id.slice(-2),i=LINES.indexOf(l);
+ return {up:f<TOP?`${f+1}${l}`:null,down:f>BOT?`${f-1}${l}`:null,side:[LINES[i-1],LINES[i+1]].filter(Boolean).map(x=>`${f}${x}`)};
+}
+function emotion(t){
+ const W={'짜증':30,'죽겠':25,'미치':25,'열받':25,'빡':25,'화나':20,'또':15,'진짜':10,'너무':10,'시끄':10,'힘들':25,'지쳤':25,'지쳐':25,'지치':25,'피곤':20,'우울':25,'외로':25,'!':5};
+ let s=0;for(const k in W)if(t.includes(k))s+=W[k];return Math.min(100,s);
+}
+function soften(t){
+ return t.replace(/^단지야[,\s]*/,'').replace(/(진짜|너무|또|짜증나 죽겠네|짜증나|죽겠네|미치겠네|열받네|빡치네)/g,'').replace(/\s{2,}/g,' ').trim();
+}
+
+/* ---------- 실제 인식: 얼굴, 음성, 블루투스 ---------- */
+const CAP={face:typeof faceapi!=='undefined',cam:!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia),camBlocked:false,mic:!!(window.SpeechRecognition||window.webkitSpeechRecognition),bt:!!navigator.bluetooth};
+const FACE={ready:false,loading:null,stream:null,open:false,timer:null,cur:null,last:null,db:[],busy:false};
+const VOICE={on:false,r:null};const BT={dev:null};
+const EXK={neutral:'무표정',happy:'웃음',sad:'슬픔',angry:'화남',fearful:'두려움',disgusted:'불쾌',surprised:'놀람'};
+async function faceLoad(){
+ if(FACE.ready)return true;if(!CAP.face)return false;
+ if(!FACE.loading)FACE.loading=(async()=>{const u='models';await faceapi.nets.tinyFaceDetector.loadFromUri(u);await faceapi.nets.faceLandmark68Net.loadFromUri(u);await faceapi.nets.faceRecognitionNet.loadFromUri(u);await faceapi.nets.faceExpressionNet.loadFromUri(u);FACE.ready=true;log(2,'FaceRecognizer','얼굴 모델 불러옴: TinyFaceDetector(Tiny YOLO v2 기반) + 특징값 128개 + 표정','real')})().catch(e=>{CAP.face=false;log(2,'FaceRecognizer','얼굴 모델을 못 불러옴: '+e.message,'real')});
+ await FACE.loading;return FACE.ready;
+}
+const detectOne=src=>faceapi.detectSingleFace(src,new faceapi.TinyFaceDetectorOptions({inputSize:320,scoreThreshold:0.45})).withFaceLandmarks().withFaceExpressions().withFaceDescriptor();
+function topExpr(ex){let k='neutral',v=0;for(const [a,b] of Object.entries(ex||{}))if(b>v){k=a;v=b}return {k,v}}
+function matchFace(desc){let best=null;for(const f of FACE.db){const d=faceapi.euclideanDistance(desc,f.desc);if(!best||d<best.d)best={i:f.i,name:f.name,d}}return best&&best.d<0.55?best:null}
+async function camOpen(msg){
+ if(!CAP.cam||CAP.camBlocked)return false;
+ $('#camdock').hidden=false;$('#camt').textContent='얼굴 모델 불러오는 중…';
+ if(!await faceLoad()){$('#camdock').hidden=true;return false}
+ const v=$('#camv');
+ try{if(!FACE.stream)FACE.stream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480},audio:false});v.srcObject=FACE.stream;await v.play()}
+ catch(e){CAP.camBlocked=true;$('#camdock').hidden=true;log(1,'Robot.camera()',`카메라를 쓸 수 없음(${e.name}), 사진으로 대신`,'real');render();return false}
+ $('#camt').textContent=msg||'카메라를 보고 있어요';
+ if(!FACE.open){FACE.open=true;camLoop()}
+ return true;
+}
+function camClose(){FACE.open=false;clearTimeout(FACE.timer);if(FACE.stream){FACE.stream.getTracks().forEach(t=>t.stop());FACE.stream=null}$('#camv').srcObject=null;$('#camdock').hidden=true}
+async function camLoop(){
+ if(!FACE.open)return;const v=$('#camv');
+ if(v.readyState>=2&&!FACE.busy){FACE.busy=true;try{drawCam(await detectOne(v),v)}catch(e){}FACE.busy=false}
+ FACE.timer=setTimeout(camLoop,300);
+}
+function drawCam(r,v){
+ const c=$('#camc'),W=v.videoWidth||640,H=v.videoHeight||480;c.width=W;c.height=H;const g=c.getContext('2d');g.clearRect(0,0,W,H);
+ if(!r){FACE.cur=null;return}
+ const b=r.detection.box,x=W-b.x-b.width,m=matchFace(r.descriptor),e=topExpr(r.expressions);
+ FACE.cur={desc:r.descriptor,m,e,t:Date.now()};if(m)FACE.last=FACE.cur;
+ const col=m?'#79D2A3':'#E2643A',label=`${m?m.name:'등록 안 된 얼굴'} · ${EXK[e.k]} ${Math.round(e.v*100)}%`;
+ g.lineWidth=4;g.strokeStyle=col;g.strokeRect(x,b.y,b.width,b.height);g.font='600 20px sans-serif';
+ g.fillStyle=col;g.fillRect(x,Math.max(0,b.y-30),g.measureText(label).width+16,28);g.fillStyle='#17262B';g.fillText(label,x+8,Math.max(20,b.y-9));
+}
+async function waitFace(ms=6000){const t0=Date.now();while(Date.now()-t0<ms){if(FACE.cur&&Date.now()-FACE.cur.t<700)return FACE.cur;await sleep(200)}return null}
+async function faceFromFile(file){
+ if(!await faceLoad())return null;const img=new Image();img.src=URL.createObjectURL(file);
+ try{await img.decode()}catch(e){return null}
+ let r=null;try{r=await detectOne(img)}catch(e){}URL.revokeObjectURL(img.src);
+ return r?{desc:r.descriptor,m:matchFace(r.descriptor),e:topExpr(r.expressions),t:Date.now()}:null;
+}
+function enroll(i,cur,how){
+ const s=st(0),h=H8(),name=h.members[i].n;
+ FACE.db=FACE.db.filter(f=>f.i!==i);FACE.db.push({i,name,desc:cur.desc});s.faces[i]=true;s.err='';
+ log(2,'FaceRecognizer.enroll()',`${name} 얼굴 ${how}, 특징값 128개 저장`,'real');
+ log(2,'PrivacyFilter','사진은 지우고 특징값만 로봇 안에 보관','real');tech('Face Recognition','Privacy Filter');
+ if(h.members.every((_,j)=>s.faces[j])){cover(2);done(0,3)}render();
+}
+async function s1FaceReal(i){
+ const s=st(0),h=H8();if(!h.robot)return;
+ if(!(await camOpen(`${h.members[i].n}님, 카메라를 정면으로 봐 주세요`))){if(FACE.ready){s.err='카메라를 쓸 수 없어서 사진으로 등록해 주세요.';render()}else s1Face(i);return}
+ const cur=await waitFace();
+ if(!cur){s.err=`${h.members[i].n}님 얼굴을 못 찾았어요. 밝은 곳에서 정면으로 다시 해 주세요.`;render();return}
+ $('#camt').textContent=`${h.members[i].n}님 얼굴 등록 완료`;enroll(i,cur,'카메라로 등록');
+}
+async function faceWho(n){
+ const s=st(n);
+ if(!FACE.db.length){s.note='시나리오 1에서 가족 얼굴부터 등록해 주세요.';render();return}
+ if(!(await camOpen('누구인지 확인할게요'))){s.note=CAP.camBlocked?'카메라를 쓸 수 없어요. 사진으로 확인해 주세요.':'얼굴 인식을 쓸 수 없어요.';render();return}
+ applyWho(n,await waitFace(4000));
+}
+function applyWho(n,cur){
+ const s=st(n);
+ if(!cur){s.note='얼굴을 못 찾았어요.';render();return}
+ if(!cur.m){s.note='등록 안 된 얼굴이에요.';log(2,'FaceRecognizer.identify()','등록 안 된 얼굴','real');render();return}
+ st(1).speaker=cur.m.i;st(5).speaker=cur.m.i;FACE.last=cur;s.note=`${cur.m.name}님으로 확인했어요 · 거리 ${cur.m.d.toFixed(2)} · 표정 ${EXK[cur.e.k]}`;
+ log(2,'FaceRecognizer.identify()',`803호 ${cur.m.name}, 거리 ${cur.m.d.toFixed(2)}, 표정 ${EXK[cur.e.k]}`,'real');tech('Face Recognition');render();
+}
+const recentFace=()=>FACE.last&&FACE.last.m&&Date.now()-FACE.last.t<60000?FACE.last:null;
+function voiceStart(n){
+ const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR)return;
+ if(VOICE.on){VOICE.r.stop();return}
+ const r=new SR();r.lang='ko-KR';r.interimResults=true;r.continuous=false;let fin='';
+ r.onresult=e=>{let t='';for(const x of e.results)t+=x[0].transcript;fin=t;const o=$('#vlive'+n);if(o)o.textContent='들은 말: '+t};
+ r.onerror=e=>log(1,'Robot.listen()','음성 인식 오류: '+e.error,'real');
+ r.onend=()=>{VOICE.on=false;const t=fin.trim();if(!t){render();return}
+  const fixed=t.replace(/^\s*(단\s?지\s?야|단디야|단지아|당지야)[,.\s]*/,'단지야, ');
+  log(1,'Robot.listen()',`실제 음성 인식: "${t}"`,'real');
+  if(n===1){st(1).text=fixed;st(1).voiceIn=true;s2Report()}else s6Say(fixed)};
+ VOICE.on=true;VOICE.r=r;r.start();render();
+}
+async function btFind(){
+ const s=st(0);
+ try{
+  const d=await navigator.bluetooth.requestDevice({acceptAllDevices:true});
+  let g=false;try{if(d.gatt){await d.gatt.connect();g=true}}catch(e){}
+  BT.dev={name:d.name||'이름 없는 기기',gatt:g};
+  d.addEventListener('gattserverdisconnected',()=>{H8().online=false;log(5,'DeviceManager','블루투스 연결 끊김: '+BT.dev.name,'real');render()});
+  s1Pair(null,BT.dev);
+ }catch(e){s.err=e.name==='NotFoundError'?'기기 선택을 취소했어요.':`블루투스를 쓸 수 없어요(${e.name}).`;log(5,'DeviceManager.connect()','블루투스 실패: '+e.name,'real');render()}
+}
+function capsHTML(){
+ const on={cam:CAP.cam&&!CAP.camBlocked,mic:CAP.mic,bt:CAP.bt,face:CAP.face};
+ return `<div class="caps">${[['face','얼굴 모델'],['cam','카메라'],['mic','음성 인식'],['bt','블루투스']].map(([k,n])=>`<span class="cap${on[k]?' on':''}">${n} ${on[k]?'사용 가능':'막힘'}</span>`).join('')}</div>`;
+}
+
+/* ---------- 시나리오 1 ---------- */
+function s1Submit(){
+ const s=st(0),h=H8();
+ s.members=s.members.map((m,i)=>({n:($('#s1n'+i)?.value||m.n).trim()||m.n,r:($('#s1r'+i)?.value||m.r).trim()||m.r}));
+ const car=norm($('#s1car')?.value||'34나 7788'),dup=Object.keys(S.H).find(u=>u!=='803'&&S.H[u].vehicles.includes(car));
+ Object.assign(h,{status:'pending',members:s.members.map(m=>({...m})),kids:$('#s1kid')?$('#s1kid').checked:true,sleep:$('#s1sleep')?.value||'23:00',vehicles:[],car:{p:car,dup:dup||null}});
+ log(1,'MobileApp.submit()','101동 803호 등록 신청, 자동차등록증 사진 첨부','real');
+ log(5,'HouseholdManager.register()',`가족 ${h.members.length}명, 차량 ${pretty(car)} 신청, 승인 대기`,'real');
+ if(dup)log(5,'HouseholdManager.checkVehicle()',`${pretty(car)}: 이미 다른 세대에 등록된 번호라 차량은 관리사무소 확인 전까지 보류`,'real');
+ log(3,'FamilyKnowledgeGraph',`세대 사정 저장: ${h.kids?'아이 있음, ':''}취침 ${h.sleep}`,'real');
+ tech('Family Knowledge Graph');cover(1);done(0,0);mark(0,'803','me pulse');render();
+}
+function s1Approve(){
+ const h=H8();if(h.status!=='pending')return;
+ h.status='approved';h.registered=true;
+ log(5,'HouseholdManager.approve()','관리사무소가 입주민 명부와 대조 후 승인','real');
+ if(h.car&&!h.car.dup){h.vehicles=[h.car.p];log(5,'HouseholdManager.checkVehicle()',`자동차등록증 명의가 세대원과 같아서 ${pretty(h.car.p)} 등록. 같은 번호는 단지에서 한 세대만`,'real')}
+ else if(h.car)log(5,'HouseholdManager.checkVehicle()','같은 번호가 다른 세대에 있어 차량만 보류, 두 세대에 확인 요청','real');
+ log(3,'DigitalTwin','803호 위치 등록: 8층 03라인, 위 903 · 아래 703','real');
+ tech('Digital Twin');cover(8);done(0,1);render();
+}
+function s1Pair(code,dev){
+ const s=st(0),h=H8();
+ if(dev){Object.assign(h,{robot:true,online:true,device:dev});s.err='';log(5,'DeviceManager.connect()',`블루투스 기기 "${dev.name}" ${dev.gatt?'연결 (GATT 연결 성공)':'검색, 803호 로봇으로 등록'}`,'real');log(1,'Robot','온라인','real');cover(4);done(0,2);render();return}
+ const v=(code??$('#s1code')?.value??'').trim();
+ if(v!==s.pair){s.err='번호가 달라요. 로봇 화면의 4자리를 넣어 주세요.';log(5,'DeviceManager.connect()','연결 번호 불일치','real');render();return}
+ s.err='';h.robot=true;h.online=true;
+ log(5,'DeviceManager.connect()','803호에 로봇과 월패드 연결','real');log(1,'Robot','온라인','real');
+ cover(4);done(0,2);render();
+}
+function s1Face(i){
+ const s=st(0),h=H8();if(!h.robot)return;s.faces[i]=true;
+ log(2,'FaceRecognizer.enroll()',`${h.members[i].n} 얼굴 등록`,'demo');
+ log(2,'SpeakerRecognizer.enroll()',`${h.members[i].n} 목소리 등록`,'demo');
+ log(2,'PrivacyFilter','사진과 녹음 원본은 지우고 특징값만 로봇 안에 보관','real');
+ tech('Face Recognition','Speaker Recognition','Privacy Filter');
+ if(h.members.every((_,j)=>s.faces[j])){cover(2);done(0,3)}
+ render();
+}
+function s1Consent(){
+ const s=st(0),h=H8();
+ ['noise','smoke','parking','health','album'].forEach(k=>{const e=$('#s1c_'+k);if(e)h.consent[k]=e.checked});
+ s.consentDone=true;
+ log(5,'ConsentManager.save()',`소음 ${h.consent.noise?'동의':'거부'}, 흡연 ${h.consent.smoke?'동의':'거부'}, 주차 ${h.consent.parking?'동의':'거부'}, 건강 정보 ${h.consent.health?'동의':'거부'}, 가족 앨범 ${h.consent.album?'동의':'거부'}`,'real');
+ cover(3);done(0,4);render();
+}
+function s1Notify(){
+ const s=st(0),h=H8();
+ const v=['robot','wallpad','app'].filter(k=>$('#s1d_'+k)?.checked);h.notify=v.length?v:['app'];s.notifyDone=true;
+ log(5,'NotificationService.setTargets()',`803호 알림: ${h.notify.map(k=>DEV[k]).join(', ')}`,'real');
+ cover(5);done(0,5);render();
+}
+function faceBtn(i){
+ if(!CAP.face)return `<button type="button" class="btn sm" data-act="s1.face:${i}">예시로 등록</button>`;
+ if(CAP.cam&&!CAP.camBlocked)return `<button type="button" class="btn sm" data-act="s1.facecam:${i}">카메라로 등록</button>`;
+ return `<label class="btn sm ghost">사진으로 등록<input type="file" accept="image/*" data-face-reg="${i}" hidden></label>`;
+}
+function whoBtn(n){
+ if(!CAP.face)return '';
+ return CAP.cam&&!CAP.camBlocked?`<button type="button" class="btn ghost sm" data-act="face.who:${n}">카메라로 누구인지 확인</button>`:`<label class="btn ghost sm">사진으로 누구인지 확인<input type="file" accept="image/*" data-face-who="${n}" hidden></label>`;
+}
+function micBtn(n){return CAP.mic?`<button type="button" class="btn dk sm" data-act="voice:${n}">${VOICE.on?'듣는 중… 멈추기':'음성으로 말하기'}</button>`:''}
+function scr1(){
+ const s=st(0),h=H8();let app,office,robot;
+ const allFaces=h.members.length&&h.members.every((_,j)=>s.faces[j]);
+ if(h.status==='none'){
+  app=`<label>동 · 호수<input value="101동 803호" readonly></label>
+  <fieldset><legend>가족 구성원</legend>${s.members.map((m,i)=>`<div class="row2"><input id="s1n${i}" value="${esc(m.n)}" aria-label="이름"><input id="s1r${i}" value="${esc(m.r)}" aria-label="관계"></div>`).join('')}</fieldset>
+  <label class="chk"><input type="checkbox" id="s1kid" checked> 아이가 있어요</label>
+  <label>보통 자는 시간<select id="s1sleep">${['22:00','22:30','23:00','23:30','24:00'].map(v=>`<option${v==='23:00'?' selected':''}>${v}</option>`).join('')}</select></label>
+  <label>차량 번호<input id="s1car" value="34나 7788"></label>
+  <button type="button" class="btn" data-act="s1.submit">등록 신청</button>`;
+ }else if(h.status==='pending')app=`<p class="state wait">관리사무소가 입주민 명부와 대조하고 있어요.</p>`;
+ else if(!h.robot)app=`<p class="state ok">입주 승인 완료</p>${CAP.bt?'<button type="button" class="btn dk" data-act="bt.find">블루투스로 로봇 찾기</button><p class="hint">주변 블루투스 기기 목록이 떠요. 또는 아래에 로봇 화면의 번호를 넣어요.</p>':''}<label>로봇 화면의 연결 번호<input id="s1code" inputmode="numeric" maxlength="4" placeholder="4자리"></label>${s.err?`<p class="err">${s.err}</p>`:''}<button type="button" class="btn" data-act="s1.pair">로봇 연결</button>`;
+ else if(!allFaces)app=`<p class="state ok">로봇 연결 완료</p><p class="hint">가족마다 얼굴과 목소리를 등록해요. 사진과 녹음 원본은 저장하지 않아요.</p><ul class="list">${h.members.map((m,i)=>`<li><span>${esc(m.n)} <small>${esc(m.r)}</small></span>${s.faces[i]?'<b class="okc">등록됨</b>':faceBtn(i)}</li>`).join('')}</ul>${s.err?`<p class="err">${s.err}</p>`:''}`;
+ else if(!s.consentDone)app=`<p class="state ok">얼굴 · 목소리 등록 완료</p><p class="hint">서비스마다 따로 켜고 꺼요. 동의 안 한 서비스는 우리 집에서 동작하지 않아요.</p>
+  <label class="chk"><input type="checkbox" id="s1c_noise" checked> 층간소음: 소음 센서 측정</label>
+  <label class="chk"><input type="checkbox" id="s1c_smoke" checked> 층간흡연: 공기 센서 측정</label>
+  <label class="chk"><input type="checkbox" id="s1c_parking" checked> 이중주차: 차량 번호 사용</label>
+  <label class="chk"><input type="checkbox" id="s1c_health"> 건강 정보: 복용, 병원 (Healthcare Family Cloud)</label>
+  <label class="chk"><input type="checkbox" id="s1c_album"> 가족 앨범: 사진 추천 (Healthcare Family Cloud)</label>
+  <button type="button" class="btn" data-act="s1.consent">동의 저장</button>`;
+ else if(!s.notifyDone)app=`<p class="state ok">동의 저장 완료</p><p class="hint">이웃 메시지와 답장을 어디로 받을지 골라요.</p>
+  <label class="chk"><input type="checkbox" id="s1d_robot" checked> 로봇 음성</label>
+  <label class="chk"><input type="checkbox" id="s1d_wallpad"> 월패드</label>
+  <label class="chk"><input type="checkbox" id="s1d_app" checked> 앱 알림</label>
+  <button type="button" class="btn" data-act="s1.notify">알림 저장</button>`;
+ else app=`<p class="state ok">설정 끝. 이 정보가 시나리오 2~4에 그대로 쓰여요.</p><ul class="list"><li><span>가족</span><span>${h.members.map(m=>esc(m.n)).join(', ')}</span></li><li><span>차량</span><span>${pretty(h.vehicles[0]||'')}</span></li><li><span>동의</span><span>${['noise','smoke','parking','health','album'].filter(k=>h.consent[k]).map(k=>({noise:'소음',smoke:'흡연',parking:'주차',health:'건강 정보',album:'가족 앨범'})[k]).join(', ')||'없음'}</span></li><li><span>알림</span><span>${h.notify.map(k=>DEV[k]).join(', ')}</span></li></ul>`;
+ office=h.status==='pending'?`<ul class="list"><li><span>101동 803호 <small>가족 ${h.members.length}명</small></span><b class="okc">명부 일치</b></li>${h.car?`<li><span>차량 ${pretty(h.car.p)} <small>자동차등록증</small></span><b class="okc">${h.car.dup?'다른 세대에 있음':'명의 일치'}</b></li>`:''}</ul><button type="button" class="btn dk" data-act="s1.approve">입주 승인</button>`:h.status==='none'?`<p class="idle">대기 중인 신청 없음</p>`:`<p class="state ok">803호 승인 완료</p>`;
+ robot=!h.registered?`<div class="face"><i></i><i></i></div><p class="idle">세대 승인을 기다리는 중</p>`:!h.robot?`<div class="face"><i></i><i></i></div><p class="hint" style="text-align:center">앱에 이 번호를 넣어 주세요</p><p class="clock">${s.pair}</p>`:!allFaces?`<div class="face"><i></i><i></i></div><p class="hint" style="text-align:center">카메라를 보고 "안녕, 단지야"라고 말해 주세요</p>`:`<div class="face"><i></i><i></i></div><div class="chat"><div class="msg bot">반가워요, ${esc(h.members[0].n)}님. 가족 ${h.members.length}명을 모두 기억했어요.</div></div>`;
+ return dev('app','803호 앱','세대 등록',app)+dev('office','관리사무소','입주 승인',office)+dev('robot','803호 로봇','연결과 등록',robot);
+}
+
+/* ---------- 시나리오 2 ---------- */
+function noiseEvents(base,cs){
+ const b=sec(base+':00');
+ const ev=[{unit:'903',t:fmt(b+11),db:52.0,kind:'충격음'},{unit:'803',t:fmt(b+12),db:38.6,kind:'충격음'},{unit:'802',t:fmt(b-20),db:31.2,kind:'생활음'}];
+ return cs==='sure'?ev:ev.filter(e=>e.unit!=='903');
+}
+/* 확정: 이웃 로봇 중 한 집에서 5초 안에 충격음. 추정: 그런 집은 없지만 확인 못 한 이웃이 있음. 불확실: 이웃 모두 확인했는데 없음 */
+function findSourceUnit(rep,ev,mine,cs){
+ const nb=neighbors(rep),all=[nb.up,nb.down,...nb.side].filter(Boolean).filter(u=>S.H[u].registered);
+ const ok=u=>{const x=S.H[u];return x.robot&&x.online&&x.consent.noise&&!(cs==='guess'&&u==='903')};
+ const c=all.filter(ok),un=all.filter(u=>!ok(u));
+ const m=ev.filter(e=>c.includes(e.unit)&&e.kind==='충격음'&&Math.abs(sec(e.t)-sec(mine.t))<=5).sort((a,b)=>b.db-a.db);
+ const lv=m[0]?'sure':un.length?'guess':'unsure';
+ return {cands:c,hit:m[0]||null,un,lv};
+}
+function escalate(n,from,to,type,reason){
+ const r={type,from,to,reason,at:type==='noise'?st(1).time:type==='smoke'?'21:13':'07:55',sent:false};
+ S.reports.unshift(r);
+ log(4,'MediationAgent.escalate()',`관리사무소로 이관: ${reason}`,'real');
+ log(5,'NotificationService.send()','관리사무소 반복 민원 리포트에 추가','real');
+ cover(17);
+}
+/* 판별 3단계와 주민 정식 신고: 세 시나리오 공통 */
+const LV={sure:'확정',guess:'추정',unsure:'불확실'};
+const TYPE={noise:'층간소음',smoke:'층간흡연',parking:'이중주차'};
+const LAW={noise:'공동주택관리법 제20조',smoke:'공동주택관리법 제20조의2',parking:'단지 관리규약 주차장 운영 규정'};
+const CASES={noise:[['sure','확정'],['guess','추정'],['unsure','불확실']],smoke:[['sure','확정'],['guess','추정'],['unsure','불확실']],parking:[['sure','확정'],['guess','추정'],['unsure','불확실']]};
+function evidOf(type,n){
+ const P={noise:['11/09 23:12 · 41.2dB','11/16 22:48 · 39.5dB'],smoke:['11/12 21:40 · +47㎍/㎥','11/18 22:05 · +52㎍/㎥'],parking:['11/05 07:50','11/17 07:58']}[type];
+ const now={noise:'오늘 23:04 · 38.6dB',smoke:'오늘 21:12 · +58㎍/㎥',parking:'오늘 07:55'}[type];
+ return [...P.slice(0,Math.max(0,n-1)),now];
+}
+function fileReport(type,to,n){
+ S.reports=S.reports.filter(r=>!(r.type===type&&r.to===to&&r.kind!=='report'));
+ const evid=evidOf(type,n);
+ const r={type,from:'803',to,kind:'report',n,evid,reason:`주민 정식 신고 · ${n}회 기록`,at:{noise:'23:20',smoke:'21:14',parking:'08:02'}[type],sent:false};
+ S.reports.unshift(r);
+ log(4,'MediationAgent.fileReport()',`803호 주민이 ${TYPE[type]} 정식 신고, 기록 ${evid.length}건 첨부`,'real');
+ log(3,'RAGRetriever',`${LAW[type]} 근거로 관리사무소 처리 절차 첨부`,'real');tech('RAG');
+ log(5,'NotificationService.send()','관리사무소 신고함에 접수, 신고한 세대는 상대에게 숨김','real');
+ cover(17);return r;
+}
+function officeNotice(type,to){
+ const r=S.reports.find(x=>x.type===type&&x.to===to&&x.kind==='report'&&!x.sent);if(!r)return null;r.sent=true;
+ const t={noise:`이웃 세대에서 층간소음 피해 신고가 접수됐습니다. 같은 일이 ${r.n}회 기록됐습니다. 공동주택관리법 제20조에 따라 소음 중단을 권고드리며, 사실 확인을 위해 세대 방문을 요청드릴 수 있습니다. 협조 부탁드립니다.`,
+  smoke:`이웃 세대에서 간접흡연 피해 신고가 접수됐습니다. 최근 2주 동안 같은 일이 ${r.n}회 기록됐습니다. 공동주택관리법 제20조의2에 따라 세대 안 흡연 중단을 권고드리며, 사실 확인을 위해 세대 방문을 요청드릴 수 있습니다. 협조 부탁드립니다.`,
+  parking:`출차를 막는 이중주차로 이웃 세대 신고가 접수됐습니다. 최근 한 달 같은 일이 ${r.n}회 기록됐습니다. 단지 관리규약에 따라 이중주차 때는 기어를 중립에 두고 바로 연락되도록 해 주시기 바랍니다.`}[type];
+ log(5,'ComplexManager',`관리사무소가 ${to}호에 ${type==='parking'?'주차 규정 안내':'중단 권고'} 발송`,'real');
+ log(5,'NotificationService.send()',`${to}호 ${S.H[to].notify.map(k=>DEV[k]).join(', ')}로 관리사무소 공지`,'real');
+ cover(17);return t;
+}
+/* 판별이 불확실할 때: 관리사무소가 특정 세대를 지목하지 않고 라인 전체에 공동 안내 */
+const LINE_L={noise:['03'],smoke:['02','03','04']};
+const LINE_LAB=t=>LINE_L[t].length>1?LINE_L[t].join(' · ')+'라인':LINE_L[t][0]+'라인';
+const LINE_T={noise:'관리사무소 안내입니다. 최근 밤 시간에 우리 라인에서 층간소음 불편 신고가 있었습니다. 어느 세대인지 정해진 것은 아닙니다. 밤 10시 이후에는 발소리와 가구 끄는 소리에 조금 더 신경 써 주시기 바랍니다.',
+ smoke:'관리사무소 안내입니다. 최근 담배 연기가 다른 세대로 들어온다는 신고가 있었습니다. 어느 세대인지 정해진 것은 아닙니다. 공동주택관리법 제20조의2에 따라 세대 안 흡연으로 이웃이 피해를 보지 않도록 협조 부탁드립니다.'};
+function lineNotice(type){
+ const r=S.reports.find(x=>x.type===type&&x.to==='미확인'&&x.kind!=='report'&&!x.line);if(!r)return;
+ const to=Object.keys(S.H).filter(id=>id!=='803'&&LINE_L[type].includes(id.slice(-2)));
+ r.line={n:to.length};const lab=LINE_LAB(type),sc=st(type==='noise'?1:2);
+ log(3,'DigitalTwin.line()',`${lab} ${to.length}세대 조회 (신고한 803호는 뺌)`,'real');tech('Digital Twin');
+ log(5,'ComplexManager',`관리사무소가 ${lab}에 공동 안내 발송, 특정 세대는 지목하지 않음`,'real');
+ log(5,'NotificationService.send()',`${lab} ${to.length}세대 월패드로 관리사무소 공동 안내`,'real');
+ sc.lineMsg=LINE_T[type];
+ sc.chat.push({who:'bot',t:`관리사무소가 어느 집인지 정하지 않고 ${type==='smoke'?'같은 라인과 옆 라인':'같은 라인'} 전체에 안내를 보냈어요.`});
+ cover(17);render();
+}
+const lineBtn=(r,present)=>r.to!=='미확인'||!LINE_L[r.type]?'':r.line?`<p class="${present?'pok':'state ok'}">${LINE_LAB(r.type)} ${r.line.n}세대에 공동 안내 보냄</p>`:present?nxb('o.line:'+r.type,LINE_LAB(r.type)+'에 공동 안내 보내기',1,'dk'):`<button type="button" class="btn dk" data-act="o.line:${r.type}">${LINE_LAB(r.type)}에 공동 안내 보내기</button>`;
+/* 관리사무소 권고 뒤에도 반복될 때: 외부 기관 신고. 주민이 고르고, 플랫폼은 신고서와 기록만 준비 */
+const EXT={
+ noise:[{k:'center',org:'층간소음 이웃사이센터',act:'측정 · 상담 신청',done:'이웃사이센터에 측정 신청을 보냈어요. 측정 기록과 관리사무소 처리 기록을 같이 붙였어요.'},{k:'adr',org:'환경분쟁조정위원회',act:'조정 신청',done:'환경분쟁조정위원회 조정 신청서를 만들었어요. 기록을 같이 붙였어요.'},{k:'police',org:'112',act:'문자 신고 내용 채우기',now:1,done:'112 문자 신고 화면에 시각과 위치를 채워 뒀어요. 보내기는 직접 눌러 주세요.'}],
+ smoke:[{k:'legal',org:'대한법률구조공단 132',act:'손해배상 상담용 기록',done:'손해배상 상담에 쓸 기록 파일을 만들었어요. 감지 기록(피해 일지)과 관리사무소 신고 · 권고 기록이 들어 있어요.'},{k:'rule',org:'입주자대표회의',act:'관리규약 개정 건의',done:'입주자대표회의에 세대 안 흡연 관리규약 개정 건의서를 만들었어요. 감지 기록 건수만 붙이고 세대는 밝히지 않았어요.'}]
+};
+const EXTN={noise:1,smoke:2};
+function extKey(type){const s=st(EXTN[type]);return type==='noise'?`803|${s.src}|noise`:`${s.src}|smoke`}
+function extOffer(type){
+ const n=EXTN[type],s=st(n);if(!n||s.extAsk||s.ext)return;
+ S.hist[extKey(type)]=(S.hist[extKey(type)]||0)+1;
+ const c=S.hist[extKey(type)];s.extAsk=true;
+ s.chat=s.chat||[];
+ const t={noise:'관리사무소 권고 뒤에도 또 시끄러워요. 외부 기관에 신고할까요? 측정 기록과 관리사무소 처리 기록을 신고서로 정리해 둘게요.',
+  smoke:'권고 뒤에도 또 연기가 들어와요. 세대 안 흡연은 경찰이나 보건소가 단속할 근거가 없고 분쟁조정 대상도 아니에요. 손해배상 상담에 쓸 기록으로 정리해 둘게요.'}[type];
+ s.chat.push({who:'me',t:type==='noise'?'단지야, 또 쿵쿵거려':'또 담배 냄새 나'});s.chat.push({who:'bot',t});
+ log(4,'MediationAgent',`관리사무소 권고 뒤 ${c}회째, 외부 기관 신고 제안 (주민이 고름)`,'real');
+ render();
+}
+function extFile(type,k){
+ const n=EXTN[type],s=st(n),o=EXT[type].find(x=>x.k===k);if(!o||!s.extAsk)return;s.extAsk=false;
+ const c=S.hist[extKey(type)]||1;
+ const items=[...evidOf(type,Math.min(c,3)),'관리사무소 정식 신고 1건 · 중단 권고 1건',`권고 뒤 반복 ${type==='noise'?'오늘 23:40':'오늘 22:05'}`];
+ s.ext={...o,items};
+ log(4,'MediationAgent.exportCase()',`${o.org} ${o.act}: 기록 ${items.length}건 정리`,'real');
+ log(5,'NotificationService.send()',o.now?'112 문자 신고 화면에 내용만 채움, 전송은 주민이 직접':`${o.org}로 신청서 전송, 상대 세대 정보는 기관에만`,'demo');
+ s.chat.push({who:'me',t:o.org.replace(' 132','')+'로 해 줘'});s.chat.push({who:'bot',t:o.done});
+ cover(17);render();
+}
+function extCard(type){
+ const s=st(EXTN[type]);if(!s.ext)return '';
+ return `<div class="ptitle">${s.ext.now?'신고 내용':'신청서'}</div><div class="pmsg"><b>${esc(s.ext.org)}</b> · ${esc(s.ext.act)}<br>${s.ext.items.map(x=>'· '+esc(x)).join('<br>')}</div><p class="pok">${s.ext.now?'내용 채움 · 전송은 직접':'보냄'}</p>`;
+}
+function extBtns(type,primary){return EXT[type].map((o,i)=>nxb(`ext:${type}:${o.k}`,`${o.org.replace(' 132','')} ${o.act}`,primary&&i===0,i===0?'':'ghost')).join('')}
+async function s2Report(){
+ const s=st(1);if(s.busy)return;
+ if(!S.services.noise){s.chat.push({who:'bot',t:'이 단지는 지금 층간소음 서비스가 꺼져 있어요.'});log(5,'ComplexManager','층간소음 서비스 꺼짐, 처리하지 않음','real');render();return}
+ ensure803();const h=H8();
+ Object.assign(s,{busy:true,status:{},msg:null,reply:null,src:null,lv:null,pending:null,suggest:false,filed:false,official:null,to:[],extAsk:false,ext:null,lineMsg:null});S.marks[1]={'803':'me'};
+ const text=s.text.trim();s.chat.push({who:'me',t:text});S.m.attempts++;S.m.live++;
+ if(s.voiceIn)s.voiceIn=false;else log(1,'Robot.listen()','803호 로봇이 음성을 받음 (입력창 글자)','demo');render();await sleep(380);
+ if(!/^단지야/.test(text)){s.chat.push({who:'bot',t:'저를 부를 땐 "단지야"라고 먼저 불러 주세요.'});log(2,'WakeWordDetector','호출어 없음, 대기 유지','real');tech('Wake Word');s.busy=false;render();return}
+ log(2,'WakeWordDetector','호출어 "단지야" 인식','real');
+ const who=h.members[s.speaker]?.n||'주민';
+ let rf=null;
+ if(CAP.face&&CAP.cam&&!CAP.camBlocked){
+  const was=FACE.open;if(!was)log(1,'Robot.camera()','부른 사람 쪽을 보고 카메라를 켬','real');
+  if(await camOpen('누가 말했는지 볼게요. 카메라를 봐 주세요')){const cur=await waitFace(3000);if(cur&&cur.m)rf=cur;if(!was){await sleep(900);camClose()}}
+ }
+ if(!rf)rf=recentFace();
+ if(rf){s.speaker=rf.m.i;log(2,'FaceRecognizer.identify()',`말한 사람을 얼굴로 확인: 803호 ${rf.m.name}`,'real')}else log(2,'SpeakerRecognizer',`말한 사람: 803호 ${who}`,'demo');
+ tech('Wake Word','Speaker Recognition');
+ if(!/(쿵|시끄|소음|뛰|발소리|쾅|울려)/.test(text)){s.chat.push({who:'bot',t:'어떤 소리가 불편한지 조금만 더 말씀해 주세요.'});log(2,'EdgeLLM','의도를 못 찾음, 다시 질문','real');tech('Edge LLM');s.busy=false;render();return}
+ log(2,'EdgeLLM',`의도: 층간소음 신고, 요약 "${soften(text)||'윗집 소음 불편'}"`,'real');
+ log(2,'PrivacyFilter','녹음 원본은 지우고 의도와 요약만 밖으로','real');
+ tech('Edge LLM','Privacy Filter');cover(10);done(1,0);s.status.in='done';S.m.accepted++;
+ let score=emotion(text);const fe=FACE.cur&&Date.now()-FACE.cur.t<20000?FACE.cur:rf;
+ if(fe&&['angry','disgusted','sad'].includes(fe.e.k)){score=Math.min(100,score+20);log(3,'EmotionAnalyzer',`카메라 표정 ${EXK[fe.e.k]} ${Math.round(fe.e.v*100)}%, 감정 점수에 반영`,'real')}
+ log(3,'EmotionAnalyzer',`감정 점수 ${score}/100`,'real');tech('Emotion AI');
+ if(score>=60){
+  const v=h.members[s.speaker===1?0:1]?.n||'가족';
+  s.chat.push({who:'bot',t:'많이 힘드셨죠. 화난 마음은 제가 걸러서, 정중하게 대신 전할게요.',sub:s.voice?`${v}님 목소리로 들려줌`:''});
+  log(4,'MediationAgent','감정이 높아서 감정 케어 먼저','real');
+  if(s.voice){log(3,'VoiceClone',`${v}님 목소리로 위로 메시지 재생`,'demo');tech('Voice Clone')}
+ }
+ render();await sleep(420);
+ const nb=neighbors('803');[nb.up,nb.down,...nb.side].forEach(u=>u&&mark(1,u,'nb'));
+ log(3,'DigitalTwin.neighbors()',`803호 위 ${nb.up}, 아래 ${nb.down}, 옆 ${nb.side.join(', ')}`,'real');tech('Digital Twin');
+ const ev=noiseEvents(s.time,s.case);
+ const mine=h.consent.noise?ev.find(e=>e.unit==='803'):null;
+ if(!mine){S.m.unsure++;log(4,'NoiseMediation','803호 소음 측정 동의 꺼짐, 측정값 없음','real');s.status.find='unsure';escalate(1,'803','미확인','noise','측정값 없이 접수');s.status.esc='done';s.chat.push({who:'bot',t:'소음 측정 동의가 꺼져 있어서 측정값 없이 관리사무소에 접수했어요.'});s.busy=false;render();return}
+ log(4,'NoiseMediation',`803호 측정: ${mine.kind} ${mine.db}dB, ${mine.t}`,'real');render();await sleep(420);
+ const {cands,hit,un,lv}=findSourceUnit('803',ev,mine,s.case);cover(13);s.lv=lv;
+ if(lv==='unsure'){
+  log(4,'MediationAgent.findSourceUnit()',`불확실: 이웃 ${cands.length}곳 모두 확인했는데 같은 시각 충격음 없음`,'real');
+  S.m.unsure++;s.status.find='unsure';escalate(1,'803','미확인','noise','이웃 모두 감지 없음, 배관이나 바깥 소리 가능성');s.status.esc='done';
+  s.chat.push({who:'bot',t:'주변 집 로봇 어디에도 같은 시각 소리가 안 잡혔어요. 배관이나 바깥 소리일 수 있어서 아무 집에도 보내지 않고 관리사무소에 기록만 남겼어요.'});s.busy=false;render();return}
+ if(lv==='guess'){
+  s.to=un;un.forEach(u=>mark(1,u,'src'));S.m.unsure++;s.src=un[0];
+  log(4,'MediationAgent.findSourceUnit()',`추정: 로봇이 있는 이웃 ${cands.length}곳은 감지 없음, ${un.join(', ')}호는 확인 못 함`,'real');s.status.find='hold';
+ }else{
+  s.src=hit.unit;s.to=[hit.unit];mark(1,hit.unit,'src pulse');S.m.judged++;
+  log(4,'MediationAgent.findSourceUnit()',`확정: ${hit.unit}호에서 5초 안에 충격음 ${hit.db}dB, 다른 이웃은 감지 없음`,'real');s.status.find='done';
+ }
+ done(1,1);render();await sleep(420);
+ const {night,limit}=limitOf(mine.t);
+ log(3,'RAGRetriever',`${night?'야간(22~06시)':'주간(06~22시)'} 직접충격 소음 기준 ${limit}dB`,'real');tech('RAG');
+ if(mine.db<=limit){
+  log(4,'MediationAgent',`${mine.db}dB ≤ ${limit}dB, 기준 이하라 전달 보류`,'real');s.status.lim='hold';done(1,2);S.m.held++;
+  s.chat.push({who:'bot',t:`측정된 소리(${mine.db}dB)가 ${night?'야간':'주간'} 기준 ${limit}dB보다 작아서 이번엔 전하지 않고 기록만 남겨 둘게요. 또 그러면 다시 말씀해 주세요.`});
+  s.busy=false;render();return}
+ log(4,'MediationAgent',`${mine.db}dB > ${limit}dB, 기준 초과`,'real');s.status.lim='done';done(1,2);
+ const tg=S.H[s.src];
+ let msg;
+ if(lv==='sure'){
+  log(3,'FamilyKnowledgeGraph',tg.kids?`${s.src}호 아이 있음, 부드러운 말투로`:`${s.src}호 특이 사항 없음`,'real');tech('Family Knowledge Graph');
+  msg=`${tg.kids?'아이들 키우시느라 쉽지 않으시죠. ':''}${night?'늦은 시간':'낮 시간'}에 아랫집에서 발소리가 크게 들린다고 해요. ${mine.t.slice(0,5)}쯤 ${mine.db}dB가 측정됐는데, ${night?'야간':'주간'} 기준은 ${limit}dB예요. 조금만 신경 써 주실 수 있을까요?`;
+ }else msg=`${night?'늦은 시간':'낮 시간'}에 이웃 세대에서 발소리가 크게 들린다는 알림이 있었어요. 어느 집인지 정해진 건 아니에요. 혹시 해당되신다면 조금만 신경 써 주세요.`;
+ log(4,'MediationAgent.refineMessage()',lv==='sure'?'감정 표현은 빼고 시각, 측정값, 기준만 남김':'특정 세대로 단정하지 않는 안내문','real');cover(14);
+ s.pending={text:msg,basis:lv==='sure'?`측정 ${mine.db}dB · ${night?'야간':'주간'} 기준 ${limit}dB · ${mine.t.slice(0,5)}`:`${night?'야간':'주간'} 기준 ${limit}dB 초과 · 세대 미확정`};
+ s.chat.push({who:'bot',t:lv==='sure'?'윗집에 이렇게 전할까요? 화난 말은 빼고 시각과 측정값만 넣었어요.':'어느 집인지 확실하지 않아서, 단정하지 않는 안내로만 보낼까요?'});
+ log(4,'MediationAgent','보내기 전에 신고한 주민에게 문구 확인','real');
+ s.busy=false;render();
+}
+function s2Send(ok=true){
+ const s=st(1);if(!s.pending)return;
+ if(!ok){s.pending=null;s.chat.push({who:'me',t:'아니, 보내지 마'});s.chat.push({who:'bot',t:'알겠어요. 보내지 않고 기록만 남겨 둘게요.'});log(4,'MediationAgent','주민이 전달 취소, 기록만 남김','real');render();return}
+ const lv=s.lv,to=s.to;s.msg=s.pending;s.pending=null;
+ s.chat.push({who:'me',t:'응, 보내 줘'});
+ to.forEach(u=>log(5,'ConsentManager',`${u}호 층간소음 서비스 동의 확인`,'real'));
+ log(5,'NotificationService.send()',`${to.join(', ')}호 ${to.map(u=>S.H[u].notify.map(k=>DEV[k]).join(', ')).join(' / ')}로 전달, 보낸 세대는 숨김`,'real');
+ log(4,'MediationAgent.deliver()','전달 완료, 답장 대기','real');
+ s.status.send='done';done(1,3);
+ S.m.delivered++;if(S.m.pairs.has(s.src))S.m.re++;S.m.pairs.add(s.src);s.deliverAt=Date.now();s.reCounted=false;
+ if(lv==='sure'){
+  const key=`803|${s.src}|noise`;S.hist[key]=(S.hist[key]||0)+1;const n=S.hist[key];
+  log(3,'MemoryGraph',`${s.src}호와 소음 갈등 ${n}회째, 정식 신고 제안 기준 ${S.N}회`,'real');tech('Memory Graph');
+  s.chat.push({who:'bot',t:'윗집에 정중하게 전했어요. 누가 보냈는지는 알리지 않았어요. 답장이 오면 알려 드릴게요.'});
+  if(n>=S.N)suggest2(n);
+ }else{log(3,'MemoryGraph','세대가 정해지지 않아서 반복 횟수는 세지 않음','real');tech('Memory Graph');s.chat.push({who:'bot',t:'안내만 보냈어요. 어느 집인지 정해지지 않아서 반복 횟수는 세지 않아요.'})}
+ render();
+}
+function suggest2(n){
+ const s=st(1);if(s.filed||s.suggest)return;s.suggest=true;
+ s.chat.push({who:'bot',t:`같은 집과 ${n}번째예요. 관리사무소에 정식으로 신고할까요? 측정 기록이 같이 첨부돼요.`});
+ log(4,'MediationAgent',`${n}회 반복, 주민에게 정식 신고 제안 (자동으로 신고하지 않음)`,'real');
+}
+function s2File(){
+ const s=st(1);if(!s.suggest||s.filed)return;s.filed=true;s.suggest=false;
+ const n=S.hist[`803|${s.src}|noise`];s.chat.push({who:'me',t:'응, 신고해 줘'});
+ fileReport('noise',s.src,n);s.status.esc='done';
+ s.chat.push({who:'bot',t:`관리사무소에 정식으로 신고했어요. 측정 기록 ${n}건이 같이 갔어요. 관리사무소가 사실을 확인하고 소음 중단을 권고해요.`});render();
+}
+function s2Warn(){
+ const s=st(1),t=officeNotice('noise',s.src);if(!t)return;s.official=t;
+ s.chat.push({who:'bot',t:'관리사무소가 윗집에 중단 권고를 보냈어요.'});render();
+}
+const R2=['죄송해요, 조심할게요.','아이들이 아직 안 자서 그랬어요. 바로 재울게요, 죄송해요.','저희 집 소리가 아닌 것 같은데, 한번 확인해 볼게요.'];
+function s2Reply(i){
+ const s=st(1);if(!s.msg||s.reply)return;s.reply=R2[i];
+ log(4,'MediationAgent.refineMessage()','답장도 같은 방식으로 확인 후 전달','real');
+ log(5,'NotificationService.send()',`803호 ${H8().notify.map(k=>DEV[k]).join(', ')}로 답장 전달`,'real');
+ S.m.replied++;S.m.rt.push(Math.max(1,Math.round((Date.now()-(s.deliverAt||Date.now()))/60000)));
+ s.status.reply='done';s.chat.push({who:'bot',t:`윗집에서 답장이 왔어요. "${R2[i]}"`});cover(15);done(1,4);render();
+}
+function s2Repeat(){
+ const s=st(1);if(!s.src||s.lv!=='sure'){s2Report();return}
+ const key=`803|${s.src}|noise`;S.hist[key]=(S.hist[key]||0)+1;const n=S.hist[key];
+ s.chat.push({who:'me',t:'단지야, 또 쿵쿵거려'});
+ log(1,'Robot.listen()','같은 시간대 같은 소리 다시 신고','demo');
+ log(3,'MemoryGraph',`${s.src}호와 소음 갈등 ${n}회째, 정식 신고 제안 기준 ${S.N}회`,'real');
+ if(s.msg&&!s.reCounted){S.m.re++;s.reCounted=true}
+ if(n>=S.N)suggest2(n);else s.chat.push({who:'bot',t:`기록해 둘게요. 같은 집과 ${n}번째예요.`});
+ render();
+}
+function scr2(){
+ const s=st(1),h=H8();
+ const members=(h.members.length?h.members:st(0).members);
+ const robot=`<div class="face"><i></i><i></i></div><div class="chat">${s.chat.map(c=>`<div class="msg ${c.who}">${esc(c.t)}${c.sub?`<small>${esc(c.sub)}</small>`:''}</div>`).join('')||'<p class="idle">"단지야"라고 부르고 말해 보세요</p>'}</div>
+  <label>로봇에게 하는 말<input data-bind="1.text" value="${esc(s.text)}"></label>
+  <div class="row2"><label>말하는 사람<select data-bind="1.speaker">${members.map((m,i)=>`<option value="${i}"${i==s.speaker?' selected':''}>${esc(m.n)}</option>`).join('')}</select></label>
+  <label>시각<select data-bind="1.time"><option value="23:04"${s.time==='23:04'?' selected':''}>23:04 야간</option><option value="14:30"${s.time==='14:30'?' selected':''}>14:30 주간</option></select></label></div>
+  <label class="chk"><input type="checkbox" data-bind="1.voice"${s.voice?' checked':''}> 감정 케어는 가족 목소리로</label>
+  <label>판별 경우<select data-bind="1.case">${CASES.noise.map(([k,n])=>`<option value="${k}"${s.case===k?' selected':''}>${n}${k==='guess'?' · 윗집 로봇 꺼짐':k==='unsure'?' · 이웃 모두 감지 없음':' · 윗집 충격음'}</option>`).join('')}</select></label>
+  <div class="ctrl">${micBtn(1)}${whoBtn(1)}</div><p class="hint" id="vlive1">${esc(s.note||'')}</p>
+  ${s.pending?`<div class="notice"><small>보낼 메시지 · ${esc(s.pending.basis)}</small><p>${esc(s.pending.text)}</p></div><div class="ctrl"><button type="button" class="btn" data-act="s2.send:1">보내기</button><button type="button" class="btn ghost" data-act="s2.send:0">보내지 않기</button></div>`:''}${s.suggest?'<button type="button" class="btn dk" data-act="s2.file">관리사무소에 정식 신고</button>':''}${s.official&&!s.extAsk&&!s.ext?'<button type="button" class="btn ghost" data-act="n.after">권고 뒤에도 또 생긴 걸로 치기</button>':''}${s.extAsk?`<div class="ctrl">${extBtns('noise',0)}</div>`:''}${extCard('noise')}
+  <button type="button" class="btn" data-act="s2.report"${s.busy?' disabled':''}>말하기</button>`;
+ const wall=s.msg?`<div class="notice"><small>이웃 세대에서 온 메시지 · ${esc(s.msg.basis)}</small><p>${esc(s.msg.text)}</p></div>${s.reply?`<p class="state ok">답장 보냄: ${esc(s.reply)}</p>`:`<div class="opts">${R2.map((r,i)=>`<button type="button" class="btn ghost sm" data-act="s2.reply:${i}">${esc(r)}</button>`).join('')}</div>`}${s.official?`<div class="notice official"><small>관리사무소 공지</small><p>${esc(s.official)}</p></div>`:''}`:s.lineMsg?`<div class="notice official"><small>관리사무소 공동 안내 · ${LINE_LAB('noise')}</small><p>${esc(s.lineMsg)}</p></div>`:`<p class="clock">${s.time}</p><p class="idle">새 메시지 없음</p>`;
+ const ST=[['in','접수'],['find','상대 세대 판별'],['lim','기준 확인'],['send','확인 후 익명 전달'],['reply','답장'],['esc','관리사무소 신고 · 기록']];
+ const lab={done:'완료',hold:s.lv==='guess'?'추정':'보류',unsure:'불확실'};
+ const key=s.src?`803|${s.src}|noise`:'803|903|noise';
+ const app=`<ul class="tl">${ST.map(([k,n])=>`<li class="${s.status[k]==='done'&&k==='esc'?'esc':s.status[k]||''}"><i></i><span>${n}</span><em>${lab[s.status[k]]||'대기'}</em></li>`).join('')}</ul>
+  ${s.lv?`<p class="hint">판별: ${LV[s.lv]}</p>`:''}<p class="hint">${s.src||'903'}호와 소음 갈등 ${S.hist[key]||0}회 · 정식 신고 제안 기준 ${S.N}회</p>
+  <button type="button" class="btn ghost sm" data-act="s2.repeat">같은 일이 또 생긴 걸로 치기</button>`;
+ const canW=S.reports.some(r=>r.type==='noise'&&r.kind==='report'&&!r.sent);
+ return dev('robot','803호 로봇','아랫집',robot)+dev('wall',`${s.src||'903'}호 월패드`,'윗집',wall)+dev('app','803호 앱','처리 상태',app)+(S.reports.some(r=>r.type==='noise')?dev('office','관리사무소','신고 · 기록',officeList('noise')+(canW?'<button type="button" class="btn dk" data-act="s2.warn">중단 권고 보내기</button>':'')):'');
+}
+
+/* ---------- 시나리오 3 ---------- */
+/* PM2.5를 평소 값과 비교해서 15㎍/㎥ 넘게 오르면 감지. 연기는 위로 올라가니 가장 아래, 가장 먼저 잡힌 집이 출발점 */
+const RISE=15;
+const SMOKE_EV=[{unit:'603',t:'21:12:02',base:11,now:69},{unit:'703',t:'21:12:31',base:12,now:56},{unit:'803',t:'21:12:58',base:10,now:41}];
+const SMOKE_CASE={sure:{ev:SMOKE_EV,off:[]},guess:{ev:SMOKE_EV,off:['503']},unsure:{ev:SMOKE_EV.filter(e=>e.unit==='803'),off:[]}};
+function judgeSmoke(c){
+ const ok=u=>{const x=S.H[u];return x&&x.registered&&x.robot&&x.online&&x.consent.smoke&&!c.off.includes(u)};
+ const ev=c.ev.filter(e=>ok(e.unit)&&e.now-e.base>=RISE).map(e=>({...e,rise:e.now-e.base})).sort((a,b)=>sec(a.t)-sec(b.t));
+ const below=ev.filter(e=>parseInt(e.unit)<803);
+ if(!below.length)return {lv:'unsure',ev,why:'아래층 센서에 연기가 안 잡힘, 바깥이나 옆 라인 가능성'};
+ const first=below[0],strong=[...below].sort((a,b)=>b.rise-a.rise)[0];
+ if(first.unit!==strong.unit)return {lv:'unsure',ev,why:'가장 먼저 잡힌 집과 가장 진한 집이 다름'};
+ const f=parseInt(first.unit.slice(0,-2)),cand=[first.unit];let clean=null;
+ for(let g=f-1;g>=BOT;g--){const u=`${g}03`;if(ok(u)){clean=u;break}cand.push(u)}
+ return {lv:cand.length===1?'sure':'guess',ev,src:first.unit,cand,clean,skip:cand.slice(1)};
+}
+function s3Detect(){
+ const s=st(2);if(s.busy||s.ask)return;
+ if(!S.services.smoke){s.chat.push({who:'bot',t:'이 단지는 지금 층간흡연 서비스가 꺼져 있어요.'});log(5,'ComplexManager','층간흡연 서비스 꺼짐, 처리하지 않음','real');render();return}
+ ensure803();const h=H8();
+ if(!h.consent.smoke){s.chat.push({who:'bot',t:'우리 집은 공기 센서 측정에 동의하지 않아서 감지하지 않았어요.'});log(5,'ConsentManager','803호 흡연 서비스 동의 꺼짐','real');render();return}
+ Object.assign(s,{msg:null,official:null,src:null,lv:null,to:[],suggest:false,filed:false,chat:[],extAsk:false,ext:null,lineMsg:null});S.marks[2]={'803':'me'};
+ const me=SMOKE_EV.find(e=>e.unit==='803');
+ log(1,'Robot.airSensor()',`803호 PM2.5 평소 ${me.base} → ${me.now}㎍/㎥ (+${me.now-me.base}), VOC 같이 상승`,'demo');
+ log(2,'SmokeClassifier','PM2.5와 VOC가 같이 올라 담배 연기로 분류, 요리 연기 아님','demo');
+ log(2,'PrivacyFilter','센서 원본은 집 안에, 감지 시각과 상승폭만 밖으로','real');tech('Privacy Filter');
+ s.chat.push({who:'bot',t:'베란다로 담배 연기가 들어와요. 창문 닫고 공기청정 모드로 바꿨어요. 이웃에게 정중하게 알릴까요?'});
+ s.ask=true;cover(11);done(2,0);render();
+}
+async function s3Ask(yes){
+ const s=st(2);if(!s.ask||s.busy)return;s.ask=false;
+ if(!yes){s.chat.push({who:'me',t:'괜찮아, 기록만 해 줘'});s.chat.push({who:'bot',t:'알겠어요. 아무 집에도 보내지 않고 우리 집 기록만 남길게요.'});log(4,'MediationAgent','주민이 알리지 않기로 함, 우리 집 기록만','real');render();return}
+ s.chat.push({who:'me',t:'응, 알려 줘'});s.busy=true;render();await sleep(380);
+ log(3,'DigitalTwin.line()',`03라인 ${TOP-BOT+1}세대 조회, 연기는 위로 올라가니 아래층부터 대조`,'real');tech('Digital Twin');
+ const c=SMOKE_CASE[s.case],j=judgeSmoke(c);
+ j.ev.forEach(e=>{mark(2,e.unit,e.unit==='803'?'me smoke':'smoke');log(4,'SmokeMediation',`${e.unit}호 ${e.t} 감지 · +${e.rise}㎍/㎥`,'real')});
+ c.off.forEach(u=>log(4,'SmokeMediation',`${u}호 로봇 오프라인, 확인 못 함`,'real'));
+ if(j.clean)log(4,'SmokeMediation',`${j.clean}호 센서 정상, 감지 없음`,'real');
+ render();await sleep(420);cover(13);s.lv=j.lv;done(2,1);
+ if(j.lv==='unsure'){
+  log(4,'MediationAgent.findSourceUnit()',`불확실: ${j.why}`,'real');escalate(2,'803','미확인','smoke',j.why);
+  s.chat.push({who:'bot',t:'아래층 센서에는 연기가 안 잡혔어요. 바깥이나 옆 라인일 수 있어서 아무 집에도 보내지 않고 관리사무소에 기록만 남겼어요.'});s.busy=false;render();return}
+ log(3,'RAGRetriever','공동주택관리법 제20조의2(간접흡연의 방지 등) 근거 첨부','real');tech('RAG');
+ if(j.lv==='guess'){
+  s.src=j.src;s.to=j.cand;j.cand.forEach(u=>mark(2,u,'src'));
+  log(4,'MediationAgent.findSourceUnit()',`추정: ${j.src}호가 가장 먼저 · 가장 진하지만 바로 아래 ${j.skip.join(', ')}호는 확인 못 함`,'real');
+  s.msg='같은 라인에서 세대 안 담배 연기가 위층 이웃 세대로 들어간다는 알림이 있었어요. 어느 집인지 정해진 건 아니에요. 혹시 해당되신다면 세대 안 흡연을 삼가 주세요.';
+  log(4,'MediationAgent.refineMessage()','특정 세대로 단정하지 않는 공동 안내문','real');cover(14);
+  log(5,'NotificationService.send()',`${j.cand.join(', ')}호에 같은 안내, 보낸 세대는 숨김`,'real');
+  log(3,'MemoryGraph','세대가 정해지지 않아서 반복 횟수는 세지 않음','real');tech('Memory Graph');done(2,2);
+  s.chat.push({who:'bot',t:`어느 집인지 하나로 정할 수 없어서 가능성 있는 ${j.cand.length}세대에 같은 안내만 보냈어요. 누가 보냈는지는 알리지 않았어요.`});
+  s.busy=false;render();return}
+ s.src=j.src;s.to=[j.src];mark(2,j.src,'src pulse');
+ log(4,'MediationAgent.findSourceUnit()',`확정: ${j.src}호가 가장 먼저 · 가장 진하게 감지, 바로 아래 ${j.clean}호는 감지 없음`,'real');
+ const key=`${j.src}|smoke`;S.hist[key]=(S.hist[key]||0)+1;const n=S.hist[key];
+ log(3,'MemoryGraph',`${j.src}호 흡연 감지 최근 2주 ${n}회째, 정식 신고 제안 기준 ${S.N}회`,'real');tech('Memory Graph');
+ render();await sleep(420);
+ s.msg='세대 안에서 피운 담배 연기가 위층 이웃 세대로 들어가고 있어요. 공동주택관리법에 따라 세대 안 흡연으로 이웃이 피해를 보지 않도록 협조 부탁드려요.';
+ log(4,'MediationAgent.refineMessage()','근거 문장을 붙여 정중하게','real');cover(14);
+ log(5,'NotificationService.send()',`${j.src}호 ${S.H[j.src].notify.map(k=>DEV[k]).join(', ')}로 전달, 보낸 세대는 숨김`,'real');done(2,2);
+ s.chat.push({who:'bot',t:'연기가 시작된 집을 찾아 정중하게 전했어요. 서로 어느 집인지는 알리지 않아요.'});
+ if(n>=S.N){s.suggest=true;s.chat.push({who:'bot',t:`같은 집에서 최근 2주 ${n}번째예요. 관리사무소에 정식으로 신고할까요? 감지 기록이 같이 첨부돼요.`});log(4,'MediationAgent',`${n}회 반복, 주민에게 정식 신고 제안 (자동으로 신고하지 않음)`,'real')}
+ s.busy=false;render();
+}
+function s3File(){
+ const s=st(2);if(!s.suggest||s.filed)return;s.filed=true;s.suggest=false;
+ const n=S.hist[s.src+'|smoke'];s.chat.push({who:'me',t:'응, 신고해 줘'});
+ fileReport('smoke',s.src,n);done(2,3);
+ s.chat.push({who:'bot',t:`관리사무소에 정식으로 신고했어요. 감지 기록 ${n}건이 같이 갔어요. 관리사무소가 사실을 확인하고 흡연 중단을 권고해요.`});render();
+}
+function s3Warn(){
+ const s=st(2),t=officeNotice('smoke',s.src);if(!t)return;s.official=t;
+ s.chat.push({who:'bot',t:'관리사무소가 중단 권고를 보냈어요.'});done(2,4);render();
+}
+function officeList(type){
+ const rs=S.reports.filter(r=>!type||r.type===type);
+ if(!rs.length)return '<p class="idle">접수된 민원 없음</p>';
+ return `<table class="tbl"><thead><tr><th>유형</th><th>구분</th><th>세대</th><th>상태</th></tr></thead><tbody>${rs.map(r=>`<tr><td>${TYPE[r.type]}</td><td>${r.kind==='report'?'정식 신고':'기록'}</td><td>${r.to==='미확인'||r.to==='미등록 차량'?esc(r.to):r.to+'호'}</td><td>${r.sent?'권고 보냄':r.line?'공동 안내 보냄':esc(r.reason)}</td></tr>`).join('')}</tbody></table>${rs.map(r=>lineBtn(r,0)).join('')}`;
+}
+function scr3(){
+ const s=st(2);
+ const robot=`<div class="face"><i></i><i></i></div><div class="chat">${s.chat.map(c=>`<div class="msg ${c.who}">${esc(c.t)}</div>`).join('')||'<p class="idle">21:12, 베란다 창문이 열려 있어요</p>'}</div>
+  <label>판별 경우<select data-bind="2.case">${CASES.smoke.map(([k,n])=>`<option value="${k}"${s.case===k?' selected':''}>${n}${k==='guess'?' · 아래층 503호 로봇 꺼짐':k==='unsure'?' · 아래층 감지 없음':' · 603호'}</option>`).join('')}</select></label>
+  ${s.ask?'<div class="ctrl"><button type="button" class="btn" data-act="s3.ask:1">알려 주세요</button><button type="button" class="btn ghost" data-act="s3.ask:0">기록만</button></div>':''}${s.suggest?'<button type="button" class="btn dk" data-act="s3.file">관리사무소에 정식 신고</button>':''}${s.official&&!s.extAsk&&!s.ext?'<button type="button" class="btn ghost" data-act="s.after">권고 뒤에도 또 생긴 걸로 치기</button>':''}${s.extAsk?`<div class="ctrl">${extBtns('smoke',0)}</div>`:''}${extCard('smoke')}
+  <button type="button" class="btn" data-act="s3.detect"${s.busy||s.ask?' disabled':''}>연기 들어오게 하기</button>`;
+ const wall=`${s.msg?`<div class="notice"><small>${s.lv==='guess'?'같은 라인 공동 안내':'이웃 세대에서 온 메시지'} · 21:13</small><p>${esc(s.msg)}</p></div>`:s.lineMsg?`<div class="notice official"><small>관리사무소 공동 안내 · ${LINE_LAB('smoke')}</small><p>${esc(s.lineMsg)}</p></div>`:'<p class="idle">새 메시지 없음</p>'}${s.official?`<div class="notice official"><small>관리사무소 공지</small><p>${esc(s.official)}</p></div>`:''}`;
+ const can=S.reports.some(x=>x.type==='smoke'&&x.kind==='report'&&!x.sent);
+ const office=`${officeList('smoke')}<div class="sl"><label>정식 신고 제안 기준 <output>${S.N}회</output><input type="range" min="2" max="5" value="${S.N}" data-bind="root.N" aria-label="반복 기준"></label></div><p class="hint">같은 집이 기준 횟수만큼 반복되면 주민에게 신고할지 물어요. 자동으로 신고하지 않아요.</p><button type="button" class="btn dk" data-act="s3.warn"${can?'':' disabled'}>중단 권고 보내기</button>`;
+ return dev('robot','803호 로봇','연기 들어온 집',robot)+dev('wall',`${s.to.length>1?s.to.join(', '):s.src||'603'}호 월패드`,s.lv==='guess'?'가능성 있는 세대':'흡연 세대',wall)+dev('office','관리사무소','신고 · 기록',office);
+}
+
+/* 확정: 번호가 등록 차량과 정확히 일치. 추정: 한 글자만 다른 등록 차량이 있음, 주민 확인 후 확정. 불확실: 등록 차량에 없음 */
+const near=(a,b)=>a.length===b.length&&[...a].filter((ch,i)=>ch!==b[i]).length===1;
+async function s4Call(){
+ const s=st(3);if(s.busy)return;
+ if(!S.services.parking){s.status.call='hold';log(5,'ComplexManager','이중주차 서비스 꺼짐, 처리하지 않음','real');render();return}
+ ensure803();Object.assign(s,{busy:true,status:{},req:null,reply:null,owner:null,ask:null,lv:null,suggest:false,filed:false,official:null,late:false,n:0,via:false});S.marks[3]={'803':'me'};
+ const p=norm(s.plate);
+ log(1,'MobileApp',`앞차 번호 입력: ${pretty(p)}`,'real');
+ const memo=soften(s.memo);
+ if(memo)log(2,'EdgeLLM',`메모 정리: "${memo}"`,'real');tech('Edge LLM');
+ cover(12);done(3,0);s.status.call='done';render();await sleep(400);
+ log(4,'ParkingCall','등록 차량에서 번호 조회','real');cover(13);
+ if(H8().vehicles.includes(p)){log(4,'MediationAgent.findSourceUnit()','우리 집 차량이라 요청하지 않음','real');s.status.find='hold';s.busy=false;render();return}
+ const reg=Object.keys(S.H).filter(u=>u!=='803'&&S.H[u].registered);
+ const owner=reg.find(u=>S.H[u].vehicles.includes(p));
+ if(owner){s.lv='sure';log(4,'MediationAgent.findSourceUnit()',`확정: 번호가 정확히 일치, ${owner}호 등록 차량`,'real');await s4To(owner,p);return}
+ let sim=null;for(const u of reg)for(const v of S.H[u].vehicles)if(near(v,p))sim={u,v};
+ if(sim){s.lv='guess';s.ask=sim;s.status.find='hold';log(4,'MediationAgent.findSourceUnit()',`추정: 일치하는 번호는 없고 한 글자 다른 ${pretty(sim.v)}가 있음, 주민에게 확인`,'real');s.busy=false;render();return}
+ s.lv='unsure';s.status.find='unsure';
+ log(4,'MediationAgent.findSourceUnit()','불확실: 등록 차량에 없음, 방문 차량일 수 있어 관리사무소로','real');
+ escalate(3,'803','미등록 차량','parking',`미등록 차량 ${pretty(p)}, 방문 차량 기록 확인`);s.busy=false;render();
+}
+async function s4Confirm(yes){
+ const s=st(3);if(!s.ask)return;const a=s.ask;s.ask=null;
+ if(!yes){s.lv='unsure';s.status.find='unsure';log(4,'MediationAgent','주민이 아니라고 함, 관리사무소로','real');escalate(3,'803','미등록 차량','parking',`번호 확인 안 됨 ${s.plate}`);render();return}
+ s.plate=pretty(a.v);s.lv='sure';s.via=true;log(4,'MediationAgent',`주민이 ${pretty(a.v)}로 확인, 추정에서 확정으로 바꿈`,'real');await s4To(a.u,a.v);
+}
+async function s4To(owner,p){
+ const s=st(3);s.busy=true;
+ s.owner=owner;mark(3,owner,'tgt pulse');s.status.find='done';done(3,1);render();await sleep(400);
+ if(!S.H[owner].consent.parking){log(5,'ConsentManager',`${owner}호 주차 서비스 동의 없음, 관리사무소로`,'real');escalate(3,'803',owner,'parking','차주 동의 없음');s.busy=false;render();return}
+ const memo=soften(s.memo);
+ s.req=`주차장에 세운 ${pretty(p)} 차량 때문에 출차가 어려운 이웃이 있어요.${memo?` 이웃 메모: ${memo}.`:''} 잠시 차를 옮겨 주실 수 있을까요?`;
+ log(4,'MediationAgent.refineMessage()','차량 번호와 사정만 남겨 정중하게','real');cover(14);
+ log(5,'NotificationService.send()',`${owner}호 ${S.H[owner].notify.map(k=>DEV[k]).join(', ')}로 전달, 요청 세대는 숨김`,'real');
+ const key=`${owner}|parking`;S.hist[key]=(S.hist[key]||0)+1;s.n=S.hist[key];
+ log(3,'MemoryGraph',`${owner}호 차량 출차 방해 최근 한 달 ${s.n}회째, 정식 신고 제안 기준 ${S.N}회`,'real');tech('Memory Graph');
+ if(s.n>=S.N){s.suggest=true;log(4,'MediationAgent',`${s.n}회 반복, 주민에게 정식 신고 제안 (자동으로 신고하지 않음)`,'real')}
+ s.status.send='done';done(3,2);s.busy=false;render();
+}
+const R4=[['5분 안에 뺄게요.',5],['10분 정도 걸려요, 죄송해요.',10],['지금 바로 나갈게요.',2]];
+function s4Reply(i){
+ const s=st(3);if(!s.req||s.reply||s.late)return;const [t,m]=R4[i];const eta=sec('07:55:00')+m*60;
+ s.reply={t,eta:fmt(eta).slice(0,5)};
+ log(4,'MediationAgent','답장 확인 후 전달','real');log(5,'NotificationService.send()','803호 앱 푸시','real');
+ s.status.reply='done';cover(15);done(3,3);render();
+}
+function s4Late(){
+ const s=st(3);if(!s.req||s.reply||s.late)return;s.late=true;s.status.reply='hold';
+ log(4,'MediationAgent','10분 동안 답장 없음, 관리사무소로','real');
+ escalate(3,'803',s.owner,'parking','차주 10분 무응답, 경비실이 직접 연락');render();
+}
+function s4File(){
+ const s=st(3);if(!s.suggest||s.filed)return;s.filed=true;s.suggest=false;fileReport('parking',s.owner,s.n);render();
+}
+function s4Warn(){const s=st(3),t=officeNotice('parking',s.owner);if(!t)return;s.official=t;render()}
+function scr4(){
+ const s=st(3);const lab={done:'완료',hold:s.lv==='guess'?'확인 필요':s.late?'무응답':'보류',unsure:'관리사무소로'};
+ const ST=[['call','이동 요청 접수'],['find','차주 세대 조회'],['send','익명 전달'],['reply','차주 답장']];
+ const app=`<p class="clock">07:55</p><label>앞차 번호<input data-bind="3.plate" value="${esc(s.plate)}"></label><label>메모<input data-bind="3.memo" value="${esc(s.memo)}"></label>
+  <button type="button" class="btn" data-act="s4.call"${s.busy?' disabled':''}>이동 요청</button>
+  ${s.ask?`<p class="state wait">등록된 번호가 없어요. 혹시 ${pretty(s.ask.v)} 차량인가요?</p><div class="ctrl"><button type="button" class="btn" data-act="s4.confirm:1">맞아요</button><button type="button" class="btn ghost" data-act="s4.confirm:0">아니에요</button></div>`:''}
+  <ul class="tl">${ST.map(([k,n])=>`<li class="${s.status[k]||''}"><i></i><span>${n}</span><em>${lab[s.status[k]]||'대기'}</em></li>`).join('')}</ul>
+  ${s.reply?`<p class="state ok">차주 답장: ${esc(s.reply.t)} ${s.reply.eta}까지 이동 예정</p>`:s.req&&!s.late?'<button type="button" class="btn ghost sm" data-act="s4.late">10분째 답이 없어요</button>':''}
+  ${s.late?'<p class="state wait">관리사무소에 넘겼어요. 경비실이 차주에게 직접 연락해요.</p>':''}
+  ${s.suggest?`<p class="hint">같은 차량이 최근 한 달 ${s.n}번째예요.</p><button type="button" class="btn dk sm" data-act="s4.file">관리사무소에 정식 신고</button>`:''}
+  <p class="hint">다른 번호도 넣어 보세요: 12가 3486, 56다 1020, 99라 0000</p>`;
+ const own=s.req?`<div class="notice"><small>이웃 세대에서 온 요청 · 07:55</small><p>${esc(s.req)}</p></div>${s.reply?`<p class="state ok">답장 보냄</p>`:s.late?'':`<div class="opts">${R4.map(([t],i)=>`<button type="button" class="btn ghost sm" data-act="s4.reply:${i}">${esc(t)}</button>`).join('')}</div>`}${s.official?`<div class="notice official"><small>관리사무소 공지</small><p>${esc(s.official)}</p></div>`:''}`:'<p class="idle">새 요청 없음</p>';
+ const canW=S.reports.some(r=>r.type==='parking'&&r.kind==='report'&&!r.sent);
+ return dev('app','803호 앱','출근하는 집',app)+dev('app',`${s.owner||'1203'}호 앱`,'차주',own)+(S.reports.some(r=>r.type==='parking')?dev('office','관리사무소','신고 · 기록',officeList('parking')+(canW?'<button type="button" class="btn dk" data-act="s4.warn">주차 규정 안내 보내기</button>':'')):'');
+}
+
+/* ---------- 시나리오 5 ---------- */
+function s5Check(){
+ ensure803();const s=st(4),t=+s.t,db=+s.db;
+ const sl=S.H['703'].sleep.split(':').map(Number),sm=sl[0]*60+sl[1];
+ log(3,'FamilyKnowledgeGraph',`아랫집 703호 취침 ${S.H['703'].sleep} (최근 2주 평균)`,'real');
+ log(3,'MemoryGraph','우리 집 최근 밤 충격음 기록 조회','real');tech('Family Knowledge Graph','Memory Graph');
+ log(2,'NoiseClassifier',`${hm(t)} 우리 집 충격음 ${db}dB`,'demo');
+ const out=[];
+ if(t>=sm-30&&t<sm){out.push(`아랫집이 ${sm-t}분 뒤 주무실 시간이에요. 뛰는 놀이는 지금 마무리해 주세요.`);log(4,'ProactiveAlert','아랫집 수면 30분 전, 우리 집에 먼저 알림','real');cover(16);done(4,0)}
+ const {night,limit}=limitOf(hm(t));
+ if(db>limit){out.push(`방금 소리(${db}dB)가 아랫집에 크게 들렸을 수 있어요. ${night?'야간':'주간'} 기준은 ${limit}dB예요.`);log(4,'ProactiveAlert',`${db}dB > ${limit}dB, 신고 전에 우리 집에 먼저 알림`,'real');cover(16);done(4,1)}
+ else log(4,'ProactiveAlert',`${db}dB ≤ ${night?'야간':'주간'} 기준 ${limit}dB, 알림 없음`,'real');
+ if(!out.length)out.push('지금은 괜찮아요. 아랫집에 크게 들릴 만한 소리는 없었어요.');
+ log(5,'NotificationService.send()','803호 로봇 음성 (아랫집에는 보내지 않음)','real');
+ s.out=[...out.map(o=>({at:hm(t),t:o})),...s.out].slice(0,6);S.marks[4]={'803':'me','703':'nb'};render();
+}
+function scr5(){
+ const s=st(4);
+ const robot=`<div class="face"><i></i><i></i></div>
+  <div class="sl"><label>지금 시각 <output id="s5tv">${hm(s.t)}</output><input type="range" min="1200" max="1435" step="5" value="${s.t}" data-bind="4.t" data-out="s5tv" data-fmt="hm" aria-label="시각"></label></div>
+  <div class="sl"><label>방금 우리 집 충격음 <output id="s5dv">${s.db}dB</output><input type="range" min="25" max="55" value="${s.db}" data-bind="4.db" data-out="s5dv" data-fmt="db" aria-label="충격음 크기"></label></div>
+  <button type="button" class="btn" data-act="s5.check">지금 상황 확인</button>
+  <div class="chat">${s.out.map(o=>`<div class="msg bot">${esc(o.t)}<small>${o.at}</small></div>`).join('')}</div>`;
+ const info=`<ul class="list"><li><span>취침 시간</span><span>${S.H['703'].sleep}</span></li><li><span>알림 시작</span><span>취침 30분 전</span></li><li><span>야간 기준</span><span>22~06시 34dB</span></li><li><span>주간 기준</span><span>06~22시 39dB</span></li></ul><p class="hint">아랫집 정보는 우리 집에 알림을 줄 때만 쓰이고, 누구인지는 보여 주지 않아요.</p>`;
+ return dev('robot','803호 로봇','우리 집',robot)+dev('app','아랫집 703호','Family Knowledge Graph',info);
+}
+
+/* ---------- 시나리오 6 ---------- */
+function s6Say(q){
+ const s=st(5);ensure803();const h=H8();const text=(q||'').trim();if(!text)return;
+ s.chat.push({who:'me',t:text});
+ if(!/^단지야/.test(text)){s.chat.push({who:'bot',t:'저를 부를 땐 "단지야"라고 먼저 불러 주세요.'});log(2,'WakeWordDetector','호출어 없음','real');tech('Wake Word');render();return}
+ const who=h.members[s.speaker]?.n||'주민';
+ log(2,'WakeWordDetector','호출어 인식','real');const rf6=recentFace();if(rf6)log(2,'FaceRecognizer.identify()',`카메라로 확인: 803호 ${rf6.m.name}`,'real');else log(2,'FaceRecognizer',`카메라로 확인: 803호 ${who}`,'demo');tech('Wake Word','Face Recognition');
+ let a;
+ if(/날씨/.test(text)){log(5,'MCPConnector','외부 날씨 서비스 조회','demo');a='오늘은 맑고 낮 최고 7도, 밤 최저 영하 2도예요. 저녁엔 따뜻하게 입고 나가세요.';cover(7);done(5,1)}
+ else if(/일정/.test(text)){log(3,'FamilyKnowledgeGraph',`${who}님 가족 일정 조회`,'real');tech('Family Knowledge Graph');a=`오늘 저녁 7시에 ${h.members[2]?.n||'아이'} 피아노 학원 픽업이 있어요.`}
+ else if(/(분리수거|공지|관리비|엘리베이터)/.test(text)){log(3,'RAGRetriever','단지 공지와 관리규약 검색','real');tech('RAG');a='분리수거는 매주 화요일과 목요일 저녁 6시부터 10시까지예요. 이번 주 목요일 오후 2시부터 4시까지는 엘리베이터 점검이 있어요.'}
+ else if(/(어제|지난번|기억)/.test(text)){log(3,'MemoryGraph','지난 대화 조회','real');log(5,'MCPConnector','주말 날씨 조회','demo');tech('Memory Graph');cover(7);done(5,1);a='어제 주말에 가족 나들이 간다고 하셨죠. 토요일 오후엔 맑을 예정이에요.'}
+ else{log(2,'EdgeLLM','일반 대화','demo');tech('Edge LLM');a='네, 듣고 있어요. 날씨, 일정, 단지 공지를 물어보시거나 이웃 사이 불편한 일을 말씀해 주세요.'}
+ s.chat.push({who:'bot',t:a});cover(6);done(5,0);render();
+}
+function s6Complex(){
+ const s=st(5);const name=($('#s6name')?.value||'단지메이트 2단지').trim(),d=+($('#s6d')?.value||3),f=+($('#s6f')?.value||15),l=+($('#s6l')?.value||4);
+ const n=Math.max(1,d)*Math.max(1,f)*Math.max(1,l);s.complexes.push({name,n});
+ log(5,'ComplexManager.register()',`${name} 등록: ${d}개 동 × ${f}층 × ${l}라인`,'real');
+ log(3,'DigitalTwin',`동 · 층 · 호 지도 생성, ${n}세대`,'real');tech('Digital Twin');cover(9);done(5,2);render();
+}
+function s6Svc(k){
+ S.services[k]=!S.services[k];st(5).svcN=(st(5).svcN||0)+1;const N={noise:'층간소음',smoke:'층간흡연',parking:'이중주차'};
+ log(5,'ComplexManager.toggle()',`${N[k]} 서비스 ${S.services[k]?'켬':'끔'}`,'real');cover(9);done(5,2);render();
+}
+function s6Pkg(k,v){
+ const s=st(5);S.pkg[k]=v===undefined?!S.pkg[k]:v;s.sub=S.pkg.hfc?'hfc':'basic';
+ log(5,'SubscriptionManager.subscribe()',`${PKG[k].n} ${S.pkg[k]?'구독, 다음 갱신 12/24':'해지, 주민 화면에서 '+PKG[k].sc+' 숨김'}`,'real');
+ if(k==='hfc'&&S.pkg[k])tech('Healthcare Family Cloud');cover(9);done(5,3);render();
+}
+function s6Fix(u){
+ S.H[u].online=true;log(5,'DeviceManager.check()',`${u}호 로봇 다시 연결, 온라인`,'real');cover(4);done(5,4);render();
+}
+function s6MoveOut(){
+ const s=st(5);const h=S.H['1104'];if(s.moved)return;s.moved=true;
+ Object.assign(h,{registered:false,robot:false,members:[],moving:false});mark(5,'1104','gone');
+ log(5,'HouseholdManager.remove()','1104호 이사 세대 정리','real');
+ log(2,'PrivacyFilter','얼굴 · 목소리 특징값, 생활 기록, 소음 이벤트 삭제','real');
+ tech('Privacy Filter');cover(8);done(5,5);render();
+}
+function scr6(){
+ const s=st(5),h=H8();const members=(h.members.length?h.members:st(0).members);
+ const Q=['단지야, 오늘 날씨 어때?','단지야, 오늘 일정 알려줘','단지야, 분리수거 언제야?','단지야, 어제 얘기 기억나?'];
+ const robot=`<div class="face"><i></i><i></i></div><div class="chat">${s.chat.map(c=>`<div class="msg ${c.who}">${esc(c.t)}</div>`).join('')||'<p class="idle">아래 말을 눌러 보세요</p>'}</div>
+  <label>카메라에 보이는 사람<select data-bind="5.speaker">${members.map((m,i)=>`<option value="${i}"${i==s.speaker?' selected':''}>${esc(m.n)}</option>`).join('')}</select></label>
+  <div class="chips">${Q.map(q=>`<button type="button" data-act="s6.say" data-q="${esc(q)}">${esc(q.replace('단지야, ',''))}</button>`).join('')}</div>
+  <div class="row2"><input id="s6q" placeholder="단지야, ..." aria-label="직접 말하기"><button type="button" class="btn sm" data-act="s6.send">말하기</button></div>
+  <div class="ctrl">${micBtn(5)}${whoBtn(5)}</div><p class="hint" id="vlive5">${esc(s.note||'')}</p>`;
+ const TB=[['complex','단지 등록'],['svc','서비스'],['sub','구독'],['dev','기기 상태']];
+ let body='';
+ if(s.tab==='complex')body=`<div class="row2"><label>단지 이름<input id="s6name" value="단지메이트 2단지"></label><label>동 수<input id="s6d" type="number" min="1" value="3"></label></div><div class="row2"><label>층 수<input id="s6f" type="number" min="1" value="15"></label><label>라인 수<input id="s6l" type="number" min="1" value="4"></label></div><button type="button" class="btn dk" data-act="s6.complex">단지 등록</button><table class="tbl"><thead><tr><th>단지</th><th class="n">세대</th></tr></thead><tbody>${s.complexes.map(c=>`<tr><td>${esc(c.name)}</td><td class="n">${c.n}</td></tr>`).join('')}</tbody></table>`;
+ if(s.tab==='svc')body=[['noise','층간소음 중재'],['smoke','층간흡연 중재'],['parking','이중주차 호출']].map(([k,n])=>`<div class="sw2"><span>${n}</span><button type="button" class="tog" aria-pressed="${S.services[k]}" aria-label="${n}" data-act="s6.svc:${k}"></button></div>`).join('')+'<p class="hint">끄면 시나리오 2~4에서 실제로 동작이 멈춰요.</p>';
+ if(s.tab==='sub')body=['apt','hfc'].map(k=>`<div class="plan" data-on="${S.pkg[k]}"><h3>${PKG[k].n}</h3><p>${PKG[k].d}</p><p class="hint">${PKG[k].sc}</p><button type="button" class="btn${S.pkg[k]?' ghost':''} sm" data-act="s6.pkg:${k}">${S.pkg[k]?'구독 중 · 해지':'구독하기'}</button></div>`).join('')+'<p class="hint">단지는 이용권만 사요. 요금은 세대 수 기준으로 정할 예정이에요. 주민 앱과 로봇에는 단지가 산 패키지의 시나리오만 보여요.</p>';
+ if(s.tab==='dev'){const R=Object.values(S.H).filter(x=>x.registered&&x.robot);const off=R.filter(x=>!x.online);body=`<p class="hint">로봇 ${R.length}대 중 ${R.length-off.length}대 온라인</p>${h.device?`<ul class="list"><li><span>803호 로봇 <small>블루투스 · ${esc(h.device.name)}</small></span><b class="okc">${h.online?'온라인':'오프라인'}</b></li></ul>`:''}<ul class="list">${off.length?off.map(x=>`<li><span>${x.id}호 <small>오프라인</small></span><button type="button" class="btn sm" data-act="s6.fix:${x.id}">다시 연결</button></li>`).join(''):'<li><span>모든 로봇 온라인</span><b class="okc">정상</b></li>'}</ul>`}
+ const ops=`<div class="seg">${TB.map(([k,n])=>`<button type="button" aria-pressed="${s.tab===k}" data-act="s6.tab:${k}">${n}</button>`).join('')}</div>${body}`;
+ const office=s.moved?'<p class="state ok">1104호 정리 완료: 얼굴 · 목소리 특징값, 생활 기록, 이벤트 삭제</p>':`<ul class="list"><li><span>1104호 <small>11/30 이사 예정</small></span><button type="button" class="btn dk sm" data-act="s6.moveout">정리하기</button></li></ul><p class="hint">이사 가는 세대의 기록은 남기지 않아요.</p>`;
+ return dev('robot','803호 로봇','일상 대화',robot)+dev('ops','플랫폼 운영자','단지 운영',ops)+dev('office','관리사무소','이사 세대 정리',office);
+}
+
+/* ---------- 시나리오 5, 6: Healthcare Family Cloud ---------- */
+const PKG={apt:{n:'APT Care Cloud',d:'이웃 사이 갈등을 중재해요. 층간소음, 층간흡연, 이중주차',sc:'시나리오 2, 3, 4'},hfc:{n:'Healthcare Family Cloud',d:'가족 돌봄과 1인 가족 일상 케어. 약 복용 알림, 병원 예약, 응급 연락, 감정 조절 등',sc:'시나리오 5'}};
+const lockedPkg=c=>{const p=TABS[tabOf(c)]?.pkg;return p&&!S.pkg[p]?p:null};
+function lockHTML(k){
+ return dev('ops','단지 구독 필요',PKG[k].n,`<p class="state wait">이 단지는 ${PKG[k].n} 패키지를 구독하지 않았어요. 주민 앱과 로봇에는 이 기능이 보이지 않아요. (${PKG[k].sc})</p><p class="hint">플랫폼 운영자의 구독 화면에서 패키지를 켜면 보여요.</p><button type="button" class="btn" data-act="pkg.open">구독 화면 열기</button>`);
+}
+const CONS_N={health:'건강 정보',album:'가족 앨범'};
+function needConsent(n,k){
+ if(H8().consent[k])return true;
+ st(n).warn=`${CONS_N[k]} 동의가 필요해요. 월패드에서 동의를 켜 주세요.`;
+ log(5,'ConsentManager.check()',`${CONS_N[k]} 동의 없음, 기능 실행 안 함`,'real');render();return false;
+}
+function setCons(n,k){
+ ensure803();const h=H8();h.consent[k]=!h.consent[k];st(n).warn='';
+ log(5,'ConsentManager.save()',`${CONS_N[k]} ${h.consent[k]?'동의':'거부'} (세대 안에서만 사용, 관리사무소에는 보이지 않음)`,'real');cover(3);render();
+}
+function consBox(n){
+ const h=H8();const row=(k)=>`<div class="sw2"><span>${CONS_N[k]}${k==='health'?' (복용, 병원)':' (사진 추천)'}</span><button type="button" class="tog" aria-pressed="${!!h.consent[k]}" aria-label="${CONS_N[k]} 동의" data-act="f.cons:${n}:${k}"></button></div>`;
+ return row('health')+(n===7?row('album'):'')+`<p class="hint">건강 정보는 우리 세대 안에서만 쓰이고 관리사무소에는 보이지 않아요.</p>${st(n).warn?`<p class="state warn">${esc(st(n).warn)}</p>`:''}`;
+}
+const MED_L={idle:'대기',asked1:'알림 보냄',asked2:'다시 알림',taken:'복용 확인',escalated:'미확인'};
+function medStep(n,ev){
+ const s=st(n),m=s.med;ensure803();
+ if(!needConsent(n,'health'))return;
+ s.warn='';
+ if(ev==='time'){
+  if(m.st!=='idle')return;m.st='asked1';
+  s.chat.push({who:'bot',t:`${hm(m.at)}예요. ${m.name} 드실 시간이에요. 드셨어요?`,at:hm(m.at)});
+  log(4,'ProactiveAlert',`복용 시각 ${hm(m.at)} 도달, ${m.name} 알림`,'real');
+  log(5,'NotificationService.send()','803호 로봇 음성으로 복용 알림','real');
+ }else if(ev==='taken'){
+  if(m.st!=='asked1'&&m.st!=='asked2')return;m.st='taken';
+  s.chat.push({who:'me',t:'네, 먹었어요'},{who:'bot',t:'잘하셨어요. 복용 확인으로 기록해 둘게요.'});
+  log(3,'MemoryGraph','복용 확인 기록 (세대 안에서만 보관)','real');tech('Memory Graph');
+ }else if(ev==='noreply'){
+  if(m.st==='asked1'){
+   m.st='asked2';
+   s.chat.push({who:'bot',t:`10분이 지났어요. ${m.name} 드셨는지 한 번 더 여쭤볼게요.`,at:hm(m.at+10)});
+   log(4,'ProactiveAlert',`${hm(m.at)} 알림에 답 없음, 10분 뒤 ${hm(m.at+10)}에 다시 말함`,'real');
+  }else if(m.st==='asked2'){
+   m.st='escalated';
+   if(n===7){
+    s.notified.unshift({at:hm(m.at+20),t:`할머니가 ${m.name} 복용 확인을 안 하셨어요. 전화해 보시겠어요?`});
+    s.chat.push({who:'bot',t:'아직 확인이 안 돼서 자녀분께 알려 드렸어요.',at:hm(m.at+20)});
+    log(5,'NotificationService.send()','자녀 앱에 복용 미확인 알림 (10분 간격 두 번 무응답)','real');
+   }else{
+    s.notified.unshift({at:hm(m.at+20),t:`${m.name} 아직 안 드셨어요. 지금 드시고 확인해 주세요.`});
+    s.chat.push({who:'bot',t:'아직 확인이 안 돼서 휴대폰으로도 알려 드렸어요.',at:hm(m.at+20)});
+    log(5,'NotificationService.send()','본인 휴대폰에 복용 알림 다시 보냄 (10분 간격 두 번 무응답)','real');
+   }
+  }else return;
+ }
+ tech('Healthcare Family Cloud');cover(18);done(n,0);render();
+}
+const sortSched=a=>[...a].sort((x,y)=>x.day-y.day||x.h.localeCompare(y.h));
+function famBook(){
+ const s=st(7);ensure803();if(!needConsent(7,'health'))return;s.warn='';
+ s.chat.push({who:'me',t:'단지야, 병원 예약해줘'});
+ log(2,'WakeWordDetector','호출어 인식','real');tech('Wake Word');
+ if(s.booked){s.chat.push({who:'bot',t:'이미 11월 28일 오후 2시 내과로 예약해 뒀어요.'});render();return}
+ log(5,'MCPConnector','병원 예약 서버 tool 호출: 내과 11/28 14:00 (예약 서버는 설계, 결과는 정해 둔 값)','demo');
+ s.booked=true;s.sched.push({day:3,label:'11/28',h:'14:00',t:'내과 진료 (예약)'});
+ log(3,'FamilyKnowledgeGraph','예약을 가족 일정에 추가','real');tech('Family Knowledge Graph');
+ s.chat.push({who:'bot',t:'내과로 11월 28일 오후 2시에 예약했어요. 가족 일정에도 넣어 뒀어요.'});
+ cover(19);done(7,1);render();
+}
+function famSched(){
+ const s=st(7);ensure803();
+ s.chat.push({who:'me',t:'단지야, 일정 알려줘'});
+ log(2,'WakeWordDetector','호출어 인식','real');tech('Wake Word');
+ log(5,'MCPConnector','일정 서버 조회: 학원, 병원 (일정 서버는 설계, 일정은 예시 데이터)','demo');
+ const list=sortSched(s.sched);
+ log(3,'FamilyKnowledgeGraph',`가족 일정 ${list.length}건을 날짜 순으로 합침`,'real');tech('Family Knowledge Graph');
+ s.chat.push({who:'bot',t:`가까운 일정이에요. ${list.map(e=>`${e.label} ${e.h} ${e.t}`).join(', ')}.`});s.showSched=true;
+ cover(22);done(7,2);render();
+}
+function famPhoto(){
+ const s=st(7);ensure803();if(!needConsent(7,'album'))return;s.warn='';
+ const d=Math.round((new Date(2026,10,29)-new Date(2026,10,25))/864e5);
+ log(3,'FamilyKnowledgeGraph',`손주 생일 11/29, 오늘 11/25 기준 D-${d}`,'real');tech('Family Knowledge Graph');
+ log(3,'ConsentManager.check()','가족 앨범 동의 확인, 동의한 앨범만 조회','real');
+ if(d>7){s.chat.push({who:'bot',t:'아직 손주 생일이 많이 남았어요.'});render();return}
+ s.photos=[{t:'작년 생일 케이크 앞',d:'2025.11 · 예시 사진'},{t:'올여름 바닷가 가족 사진',d:'2026.07 · 예시 사진'},{t:'피아노 발표회',d:'2026.04 · 예시 사진'}];
+ log(5,'NotificationService.send()','803호 월패드에 사진 3장 표시 (사진 고르기는 정해 둔 값)','demo');
+ s.chat.push({who:'bot',t:`하린이 생일이 ${d}일 남았어요. 월패드에 지난 사진 3장을 띄웠어요.`});
+ cover(21);done(7,3);render();
+}
+function famSos(v){
+ const s=st(7);ensure803();
+ if(v==='call'){
+  if(s.sos!=='idle')return;s.sos='ask';
+  s.chat.push({who:'me',t:'도와줘!'});
+  log(2,'EdgeLLM','의도: 응급 도움 요청','real');tech('Edge LLM');
+  s.notified.unshift({at:'지금',t:'할머니가 "도와줘"라고 하셨어요. 바로 연락해 보세요.'});
+  log(5,'NotificationService.send()','정해 둔 연락처(자녀 앱, 경비실 월패드)로 응급 알림 (전달은 정해 둔 값)','demo');
+  s.chat.push({who:'bot',t:'자녀분과 경비실에 알렸어요. 119에도 연락할까요?'});
+  cover(20);done(7,4);
+ }else if(v==='yes'&&s.sos==='ask'){
+  s.sos='119';s.chat.push({who:'me',t:'네, 119에도 연락해 주세요'},{who:'bot',t:'119 연결을 시작할게요. (시연이라 실제로 전화하지는 않아요)'});
+  log(5,'NotificationService.send()','주민이 확인한 뒤 119 연결 (시연용, 실제 발신 없음)','demo');
+ }else if(v==='no'&&s.sos==='ask'){
+  s.sos='no119';s.chat.push({who:'me',t:'아니요'},{who:'bot',t:'알겠어요. 곁에 있을게요. 필요하면 다시 말씀해 주세요.'});
+  log(5,'NotificationService','119는 주민이 확인하지 않아 연락하지 않음','real');
+ }else return;
+ render();
+}
+function chatHTML(s,emp){return `<div class="chat">${s.chat.map(c=>`<div class="msg ${c.who}">${esc(c.t)}${c.at?`<small>${c.at}</small>`:''}</div>`).join('')||`<p class="idle">${emp}</p>`}</div>`}
+function notiHTML(s,title){return `<h3 class="hint" style="margin:0">${title}</h3>${s.notified.length?`<ul class="list">${s.notified.map(x=>`<li><span>${esc(x.t)}</span><small>${x.at}</small></li>`).join('')}</ul>`:'<p class="idle">받은 알림이 없어요</p>'}`}
+function scrFam(){
+ const s=st(7),m=s.med;
+ const askMed=m.st==='asked1'||m.st==='asked2';
+ const robot=`<div class="face"><i></i><i></i></div>${chatHTML(s,'아래 버튼을 눌러 보세요')}
+  ${askMed?`<div class="chips"><button type="button" data-act="f.med:7:taken">네, 먹었어요</button><button type="button" data-act="f.med:7:noreply">대답 못 함, 10분 지남</button></div>`:''}
+  ${s.sos==='ask'?`<div class="chips"><button type="button" data-act="f.sos:yes">네, 119에도 연락</button><button type="button" data-act="f.sos:no">아니요</button></div>`:''}
+  <div class="chips"><button type="button" data-act="f.med:7:time">${hm(m.at)} 복용 시각이 됨</button><button type="button" data-act="f.book">단지야, 병원 예약해줘</button><button type="button" data-act="f.sched">단지야, 일정 알려줘</button><button type="button" data-act="f.photo">손주 생일 D-4</button><button type="button" data-act="f.sos:call">도와줘!</button></div>`;
+ const app=`<ul class="list"><li><span>${m.name} 복용</span><b>${MED_L[m.st]}</b></li></ul>${notiHTML(s,'자녀 앱 알림')}${s.showSched?`<h3 class="hint" style="margin:6px 0 0">가족 일정</h3><ul class="list">${sortSched(s.sched).map(e=>`<li><span>${e.label} ${e.h}</span><span>${esc(e.t)}</span></li>`).join('')}</ul>`:''}`;
+ const wall=consBox(7)+(s.photos?`<h3 class="hint" style="margin:6px 0 0">추천 사진</h3><div class="chips">${s.photos.map(p=>`<div style="border:1px dashed var(--line);border-radius:10px;padding:10px;background:var(--sand);font-size:13px"><b>${esc(p.t)}</b><br><small>${p.d}</small></div>`).join('')}</div>`:'');
+ return dev('robot','803호 로봇','할머니와 손주',robot)+dev('app','자녀 앱','보호자',app)+dev('wall','803호 월패드','세대 동의와 사진',wall);
+}
+function soloFeel(text){
+ const s=st(8);ensure803();text=(text||'').trim();if(!text)return;
+ s.chat.push({who:'me',t:text});
+ let score=emotion(text);const fe=FACE.cur&&Date.now()-FACE.cur.t<20000?FACE.cur:null;
+ if(fe&&['angry','disgusted','sad'].includes(fe.e.k)){score=Math.min(100,score+20);log(3,'EmotionAnalyzer',`카메라 표정 ${EXK[fe.e.k]} ${Math.round(fe.e.v*100)}%, 감정 점수에 반영`,'real')}
+ log(3,'EmotionAnalyzer',`감정 점수 ${score}/100`,'real');tech('Emotion AI');
+ s.score=score;
+ if(score>=60){s.chat.push({who:'bot',t:'많이 지치셨나 봐요. 불빛을 조금 낮추고 따뜻한 차 한 잔 하실래요? 얘기하고 싶으면 들을게요.'});log(2,'EdgeLLM','위로 응답 (규칙 기반)','demo');tech('Edge LLM')}
+ else s.chat.push({who:'bot',t:'그렇군요. 오늘 하루 어땠는지 편하게 말해 주세요.'});
+ cover(23);done(8,1);render();
+}
+async function soloFaceFeel(){
+ const s=st(8);ensure803();
+ if(!(await camOpen('지금 표정을 볼게요. 카메라를 봐 주세요'))){s.chat.push({who:'bot',t:location.protocol==='file:'||!window.isSecureContext?'이 주소에서는 카메라가 막혀요. VS Code Live Server(localhost)로 열어 주세요.':'카메라를 쓸 수 없어요. 브라우저 카메라 권한을 확인해 주세요.'});log(2,'EmotionAnalyzer','카메라를 쓸 수 없음','real');render();return}
+ const cur=await waitFace(6000);
+ if(!cur){s.chat.push({who:'bot',t:'얼굴이 보이지 않아요. 카메라를 봐 주세요.'});log(2,'EmotionAnalyzer','얼굴을 찾지 못함','real');render();return}
+ const k=cur.e.k,sad=['sad','angry','disgusted','fearful'].includes(k);
+ const score=sad?Math.max(60,Math.round(cur.e.v*100)):Math.min(30,Math.round((1-cur.e.v)*30));
+ log(2,'FaceRecognizer.identify()',`로봇 카메라, 표정 ${EXK[k]} ${Math.round(cur.e.v*100)}%`,'real');
+ log(3,'EmotionAnalyzer',`표정만으로 감정 점수 ${score}/100`,'real');tech('Face Recognition','Emotion AI');
+ s.score=score;
+ if(score>=60)s.chat.push({who:'bot',t:'많이 지치셨나 봐요. 불빛을 조금 낮추고 따뜻한 차 한 잔 하실래요? 얘기하고 싶으면 들을게요.'}),log(2,'EdgeLLM','위로 응답 (규칙 기반)','demo');
+ else s.chat.push({who:'bot',t:'표정이 편안해 보여요. 오늘 하루 어땠는지 편하게 말해 주세요.'});
+ cover(23);done(8,1);render();
+}
+function soloHome(){
+ const s=st(8);ensure803();
+ log(3,'MemoryGraph','지난 대화 조회: 고향은 부산 (예시 기록)','demo');tech('Memory Graph');
+ log(2,'EdgeLLM','고향 이야기를 꺼내는 문장','demo');tech('Edge LLM');
+ s.chat.push({who:'bot',t:'지난번에 고향이 부산이라고 하셨죠. 요즘도 가끔 생각나세요?'});
+ cover(24);done(8,2);render();
+}
+function soloFood(){
+ const s=st(8);ensure803();
+ log(5,'MCPConnector',`날씨 서비스 조회: ${s.temp}도 (날씨 서버는 설계, 값은 정해 둔 값)`,'demo');
+ log(3,'MemoryGraph','고향 기록(부산) 조회','demo');tech('Memory Graph');
+ const dish=s.temp<=10?'따뜻한 돼지국밥':'시원한 밀면';
+ s.chat.push({who:'bot',t:`오늘은 ${s.temp}도예요. 고향 얘기도 하셨으니 ${dish} 어때요?`});
+ cover(25);done(8,3);render();
+}
+function soloLeisure(){
+ const s=st(8);ensure803();
+ log(5,'MCPConnector','주말 날씨와 일정 조회 (날씨 서버는 설계, 값은 정해 둔 값)','demo');
+ const sun=s.wx==='sunny',busy=s.ev==='busy';
+ const t=sun&&!busy?'토요일엔 맑아요. 오후에 가까운 공원 산책하고 저녁은 밖에서 드시는 건 어때요?':sun?'토요일엔 맑은데 오후 3시에 일정이 있어요. 일정 전후로 한 시간 산책을 넣을까요?':!busy?'주말에 비가 와요. 집에서 쉬면서 밀린 영상 보는 시간으로 잡을까요?':'주말에 비가 오고 오후 3시 일정도 있어요. 일정 시간만 우산 챙기고 나머지는 쉬는 시간으로 둘까요?';
+ log(3,'FamilyKnowledgeGraph',`날씨(${sun?'맑음':'비'})와 일정(${busy?'있음':'없음'}) 조건으로 제안 선택`,'real');tech('Family Knowledge Graph');
+ s.chat.push({who:'bot',t});cover(26);done(8,4);render();
+}
+function scrSolo(){
+ const s=st(8),m=s.med;
+ const askMed=m.st==='asked1'||m.st==='asked2';
+ const robot=`<div class="face"><i></i><i></i></div>${chatHTML(s,'아래 버튼을 눌러 보세요')}
+  ${askMed?`<div class="chips"><button type="button" data-act="f.med:8:taken">네, 먹었어요</button><button type="button" data-act="f.med:8:noreply">대답 못 함, 10분 지남</button></div>`:''}
+  <div class="chips"><button type="button" data-act="f.med:8:time">${hm(m.at)} 복용 시각이 됨</button><button type="button" data-act="f.feel" data-q="아, 오늘 진짜 너무 힘들다. 완전 지쳤어">퇴근해서 지친 말투</button><button type="button" data-act="f.feel" data-q="오늘은 그냥 괜찮았어">괜찮은 말투</button><button type="button" data-act="f.facefeel">카메라로 표정 보기</button><button type="button" data-act="f.home">저녁에 말 걸기</button><button type="button" data-act="f.food">음식 추천</button><button type="button" data-act="f.leisure">주말 제안</button></div>
+  <div class="row2"><input id="s8q" placeholder="퇴근해서 한마디" aria-label="직접 말하기"><button type="button" class="btn sm" data-act="f.feel">말하기</button></div>`;
+ const app=`<ul class="list"><li><span>${m.name} 복용</span><b>${MED_L[m.st]}</b></li><li><span>감정 점수</span><b>${s.score===null?'아직 없음':s.score+'/100'}</b></li></ul>${notiHTML(s,'내 휴대폰 알림')}`;
+ const wall=consBox(8)+`<label>오늘 기온<select data-bind="8.temp"><option value="6"${s.temp==6?' selected':''}>6도, 쌀쌀해요</option><option value="15"${s.temp==15?' selected':''}>15도, 선선해요</option><option value="28"${s.temp==28?' selected':''}>28도, 더워요</option></select></label><div class="row2"><label>주말 날씨<select data-bind="8.wx"><option value="sunny"${s.wx==='sunny'?' selected':''}>맑음</option><option value="rain"${s.wx==='rain'?' selected':''}>비</option></select></label><label>주말 일정<select data-bind="8.ev"><option value="none"${s.ev==='none'?' selected':''}>없음</option><option value="busy"${s.ev==='busy'?' selected':''}>오후 3시 있음</option></select></label></div><p class="hint">날씨와 일정은 정해 둔 값이고, 어떤 제안을 고르는지는 화면 안에서 계산해요.</p>`;
+ return dev('robot','803호 로봇','혼자 사는 집',robot)+dev('app','내 휴대폰','본인',app)+dev('wall','803호 월패드','세대 동의와 설정값',wall);
+}
+
+/* ---------- MVP 검증 ---------- */
+function rates(){
+ const m=S.m,p=(a,b)=>b?Math.min(100,Math.round(a/b*100)):null;
+ return {n:m.attempts,acc:p(m.accepted,m.attempts),judge:p(m.judged,m.judged+m.unsure),unsure:p(m.unsure,m.judged+m.unsure),reply:p(m.replied,m.delivered),re:p(m.re,m.delivered),rt:m.rt.length?Math.round(m.rt.reduce((a,b)=>a+b,0)/m.rt.length):null};
+}
+function verdict(r){
+ const T=S.T;
+ if(r.n<5)return {k:'wait',t:'데이터 더 필요',d:`신고가 5건 이상 쌓이면 판단해요. 지금 ${r.n}건.`};
+ if(r.unsure!==null&&r.unsure>T.unsure)return {k:'stop',t:'멈추고 판별 방식부터 다시',d:`판별 불확실 ${r.unsure}%가 기준 ${T.unsure}%를 넘었어요. 센서 배치와 판별 방식부터 다시 설계해요.`};
+ if(!S.m.delivered)return {k:'wait',t:'데이터 더 필요',d:'아직 윗집에 전달된 건이 없어요.'};
+ if(r.reply<T.reply)return {k:'fix',t:'메시지 문구부터 수정',d:`답장률 ${r.reply}%가 기준 ${T.reply}%보다 낮아요. 순화 문구와 전달 기기부터 고쳐요.`};
+ if(r.re>T.re)return {k:'fix',t:'관리사무소 연계부터 수정',d:`재신고율 ${r.re}%가 기준 ${T.re}%를 넘어요. 순화 전달만으로는 부족해서 관리사무소 이관을 앞당겨요.`};
+ return {k:'go',t:'계속, 시범 단지 운영',d:`답장률 ${r.reply}%, 재신고율 ${r.re}%로 기준을 통과했어요. 흡연, 주차까지 묶어서 시범 단지 1곳에서 운영해요.`};
+}
+function rng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function simulate(n=20){
+ const R=rng(seed++),m=S.m;
+ for(let i=0;i<n;i++){
+  m.attempts++;m.sim++;
+  if(R()<0.06)continue;
+  m.accepted++;
+  if(R()>0.85){m.unsure++;continue}
+  m.judged++;
+  const night=R()<0.7,db=33+R()*10;
+  if(db<=(night?34:39)){m.held++;continue}
+  m.delivered++;
+  if(R()<0.22)m.re++;
+  if(R()<0.62){m.replied++;m.rt.push(Math.round(2+R()*38))}
+ }
+ log(4,'MVP 측정',`가상 주민 신고 ${n}건을 같은 흐름으로 돌려서 측정값에 반영`,'demo');
+ done(6,2);done(6,3);render();
+}
+function scrMVP(){
+ const r=rates(),v=verdict(r),m=S.m,T=S.T;
+ const pct=x=>x===null?'-':x+'%';
+ const K=[['신고 접수율',pct(r.acc),r.acc,'접수 ÷ 말하기 시도','② WakeWordDetector, EdgeLLM'],['판별 성공률',pct(r.judge),r.judge,'확정 ÷ (확정 + 불확실)','④ MediationAgent.findSourceUnit()'],['답장률',pct(r.reply),r.reply,'답장 ÷ 윗집 전달','⑤ NotificationService'],['답장까지 걸린 시간',r.rt===null?'-':`${r.rt}분`,r.rt===null?null:Math.min(100,r.rt/40*100),'전달부터 답장까지 평균','④ MediationAgent'],['재신고율',pct(r.re),r.re,'같은 집 다시 신고 ÷ 전달','③ MemoryGraph']];
+ const hyp=`<p class="k">1 · 검증할 가설</p><p class="big">밤에 층간소음이 생기면 아랫집 주민은 직접 올라가거나 관리사무소에 전화하는 대신 로봇에게 말로 신고하고, 윗집은 순화된 메시지를 받으면 답장할 것이다.</p>
+  <dl class="hypk"><dt>누가</dt><dd>로봇이 있는 위아래 세대 주민</dd><dt>언제</dt><dd>밤 10시 이후 층간소음</dd><dt>기대 행동</dt><dd>말로 신고하고, 받은 쪽은 답장한다</dd><dt>틀리면</dt><dd>답장이 없거나 같은 집 신고가 반복된다</dd></dl>`;
+ const flow=`<p class="k">2 · 숫자를 세는 흐름</p><h3>층간소음 신고와 중재</h3><ol class="fl2">
+  <li><span>말로 신고<small>UC-15 · ② WakeWordDetector, EdgeLLM</small></span></li>
+  <li><span>윗집 판별<small>UC-18 · ③ DigitalTwin · ④ findSourceUnit()</small></span></li>
+  <li><span>야간 34dB, 주간 39dB 기준 확인<small>③ RAGRetriever</small></span></li>
+  <li><span>순화해서 익명 전달<small>UC-19 · ④ refineMessage(), deliver()</small></span></li>
+  <li><span>윗집 답장<small>UC-20, 21 · ⑤ NotificationService</small></span></li></ol>
+  <p class="hint">흡연, 주차도 같은 흐름이에요. 시나리오 3, 4에서 볼 수 있어요.</p>
+  <button type="button" class="btn" data-act="go:1">층간소음 신고와 중재에서 직접 시연</button>`;
+ const kpi=`<p class="k">3 · 측정 지점</p><h3>흐름 중간에서 세는 숫자</h3><div>${K.map(([l,val,w,f,where])=>`<div class="kr"><b>${l}</b><strong>${val}</strong><div class="bar"><i style="width:${w||0}%"></i></div><small>${f} · ${where}</small></div>`).join('')}</div>
+  <p class="cnt">시도 ${m.attempts} · 접수 ${m.accepted} · 확정 ${m.judged} · 불확실 ${m.unsure} · 기준 이하 보류 ${m.held} · 전달 ${m.delivered} · 답장 ${m.replied}<br>직접 시연 ${m.live}건, 가상 주민 ${m.sim}건</p>`;
+ const dec=`<p class="k">4 · 다음 판단 기준</p><div class="verdict v-${v.k}"><b>${v.t}</b><p>${v.d}</p></div>
+  <div class="rule"><span>판별 불확실이 이보다 많으면 멈춤<em>센서 방식부터 다시</em></span><label style="display:flex;align-items:center;gap:4px"><input type="number" min="0" max="100" value="${T.unsure}" data-bind="T.unsure" aria-label="불확실 기준">%</label></div>
+  <div class="rule"><span>답장률이 이보다 낮으면 수정<em>메시지 문구와 전달 기기</em></span><label style="display:flex;align-items:center;gap:4px"><input type="number" min="0" max="100" value="${T.reply}" data-bind="T.reply" aria-label="답장률 기준">%</label></div>
+  <div class="rule"><span>재신고율이 이보다 높으면 수정<em>관리사무소 이관 앞당기기</em></span><label style="display:flex;align-items:center;gap:4px"><input type="number" min="0" max="100" value="${T.re}" data-bind="T.re" aria-label="재신고율 기준">%</label></div>
+  <p class="hint">셋 다 통과하면 계속, 시나리오 3, 4로 넓혀요. 기준 숫자는 팀이 정하는 값이에요.</p>
+  <div class="ctrl"><button type="button" class="btn dk sm" data-act="mvp.sim">가상 주민 20건 돌려보기</button><button type="button" class="btn ghost sm" data-act="reset">측정값 지우기</button></div>`;
+ if(m.attempts)[0,1].forEach(i=>done(6,i));
+ return `<div class="mvgrid" style="grid-column:1/-1"><section class="mvc hyp">${hyp}</section><section class="mvc">${flow}</section><section class="mvc">${kpi}</section><section class="mvc">${dec}</section></div>`;
+}
+
+/* ---------- 시연 화면 ---------- */
+const DEMO={on:false,sc:'noise',sub:{robot:'home',noise:'report',health:'fam'}};
+const DSUB={robot:[['home','입주와 하루'],['ops','단지 운영']],health:[['fam','가족 세대'],['solo','1인 가족 세대']],noise:[['report','신고와 중재'],['pre','미리 알림']]};
+const DPKG={noise:'apt',smoke:'apt',parking:'apt',health:'hfc'};
+const DSC=[['robot','단지 내 로봇'],['noise','층간소음'],['smoke','층간흡연'],['parking','이중주차'],['health','헬스케어 패밀리']];
+DEMO.case={noise:'sure',smoke:'sure',parking:'sure'};
+const nxb=(act,label,on,cls='')=>`<button type="button" class="btn ${cls}${on?' nx':''}" data-act="${act}">${label}</button>`;
+function dBub(chat,n=4){return `<div class="pbub">${chat.slice(-n).map(c=>`<div class="m ${c.who==='me'?'me':'bot'}">${esc(c.t)}${c.sub?`<small>${esc(c.sub)}</small>`:''}</div>`).join('')}</div>`}
+function dRobot(name,alert,chat,ctl){return `<div class="pcol"><div class="rbody"><div class="rscreen${alert?' alert':''}"><i></i><i></i></div></div><p class="plab">${name}</p>${dBub(chat)}${ctl?`<div class="pctl">${ctl}</div>`:''}</div>`}
+function dWall(name,time,body){return `<div class="pcol"><div class="pwall"><div class="scr"><div class="hd"><span>${name}</span><span>${time}</span></div>${body}</div></div><p class="plab">${name} 월패드</p></div>`}
+function dPhone(name,body){return `<div class="pcol"><div class="pphone"><div class="notch"></div><div class="pscr">${body}</div></div><p class="plab">${name}</p></div>`}
+function dAdmin(name,body,wide){return `<div class="pcol"><div class="padmin${wide?' wide':''}"><div class="ahd">${name}</div><div class="abody">${body}</div></div><p class="plab">${name}</p></div>`}
+const tl=(st,list)=>`<ul class="ptl">${list.map(([k,n])=>`<li class="${st[k]==='done'?'ok':st[k]?'hold':''}"><i></i>${n}</li>`).join('')}</ul>`;
+function dRobotUse(){
+ const s0=st(0),h=H8(),s6=st(5),allF=h.members.length>0&&h.members.every((_,j)=>s0.faces[j]);
+ let app;
+ if(h.status==='none')app=`<div class="ptitle">세대 등록</div><div class="pmsg">101동 803호<br>${s0.members.map(m=>esc(m.n)).join(', ')}<br>차량 34나 7788</div>${nxb('d.r.submit','등록 신청',1)}`;
+ else if(h.status==='pending')app=`<div class="ptitle">세대 등록</div><p class="pnote">관리사무소에서 확인하고 있어요</p>`;
+ else if(!h.robot)app=`<div class="ptitle">로봇 연결</div><p class="pok">입주 승인 완료</p>${CAP.bt?nxb('bt.find','블루투스로 로봇 찾기',1,'dk'):''}${nxb('d.r.pair','연결 번호로 연결',!CAP.bt,CAP.bt?'ghost':'')}${s0.err?`<p class="pnote">${esc(s0.err)}</p>`:''}`;
+ else if(!allF)app=`<div class="ptitle">가족 얼굴 등록</div>${tl(Object.fromEntries(h.members.map((_,i)=>[i,s0.faces[i]?'done':''])),h.members.map((m,i)=>[i,esc(m.n)]))}${nxb('d.r.face','얼굴 등록',1)}${s0.err?`<p class="pnote">${esc(s0.err)}</p>`:''}`;
+ else if(!s0.consentDone)app=`<div class="ptitle">서비스별 동의</div><p class="pnote">동의한 서비스만 우리 집에서 동작해요</p><label class="pchk"><input type="checkbox" id="s1c_noise" checked>층간소음 · 소음 센서</label><label class="pchk"><input type="checkbox" id="s1c_smoke" checked>층간흡연 · 공기 센서</label><label class="pchk"><input type="checkbox" id="s1c_parking" checked>이중주차 · 차량 번호</label>${nxb('s1.consent','동의 저장',1)}`;
+ else if(!s0.notifyDone)app=`<div class="ptitle">알림 받을 기기</div><label class="pchk"><input type="checkbox" id="s1d_robot" checked>로봇 음성</label><label class="pchk"><input type="checkbox" id="s1d_wallpad">월패드</label><label class="pchk"><input type="checkbox" id="s1d_app" checked>앱 알림</label>${nxb('s1.notify','알림 저장',1)}`;
+ else app=`<div class="ptitle">우리 집</div>${tl({a:'done',b:'done',c:'done',d:'done',e:'done',f:'done'},[['a','세대 등록'],['b','입주 승인'],['c','로봇 연결'+(h.device?' · '+esc(h.device.name):'')],['d',`가족 ${h.members.length}명 얼굴 등록`],['e','서비스 동의 '+['noise','smoke','parking'].filter(k=>h.consent[k]).length+'개'],['f','알림: '+h.notify.map(k=>DEV[k]).join(', ')]])}`;
+ const adm=h.status==='pending'?`<div class="arow"><span>101동 803호 · 가족 ${h.members.length}명</span><b>명부 일치</b></div>${h.car?`<div class="arow"><span>차량 ${pretty(h.car.p)}</span><b>${h.car.dup?'다른 세대에 있음':'등록증 일치'}</b></div>`:''}${nxb('d.r.approve','입주 승인',1,'dk')}`:h.status==='none'?'<p class="pnote">대기 중인 신청 없음</p>':'<p class="pok">803호 입주 승인 완료</p>';
+ const ready=allF&&s0.notifyDone;
+ const chat=ready?s6.chat:allF?[{who:'bot',t:`반가워요, ${h.members[0].n}님. 가족 ${h.members.length}명을 모두 기억했어요.`}]:h.robot?[{who:'bot',t:'카메라를 봐 주세요. 가족 얼굴을 한 명씩 기억할게요.'}]:h.registered?[{who:'bot',t:`앱에 연결 번호 ${s0.pair}을 넣어 주세요.`}]:[];
+ const Q=['단지야, 오늘 날씨 어때?','단지야, 분리수거 언제야?','단지야, 오늘 일정 알려줘'];
+ const ctl=ready?Q.map((q,i)=>`<button type="button" class="btn ghost sm${s6.chat.length===i*2?' nx':''}" data-act="s6.say" data-q="${esc(q)}">${esc(q.replace('단지야, ',''))}</button>`).join('')+(CAP.mic?nxb('voice:5',VOICE.on?'듣는 중…':'음성으로 말하기',0,'sm'):''):'';
+ return dPhone('803호 앱',app)+dAdmin('관리사무소',adm)+dRobot('803호 로봇',false,chat,ctl);
+}
+function dOps(){
+ const s6=st(5),R=Object.values(S.H).filter(x=>x.registered&&x.robot),off=R.filter(x=>!x.online);
+ const reg=s6.complexes.length>1,svcT=(s6.svcN||0)>=2&&S.services.parking,sub=S.prog[5].has(3),fixed=!S.H['1002'].online?false:true;
+ const nxt=!reg?'reg':!svcT?'svc':!sub?'sub':off.length?'dev':!s6.moved?'move':'';
+ const ops=`<div class="asec"><h4>단지 등록</h4>${s6.complexes.map(c=>`<div class="arow"><span>${esc(c.name)}</span><b>${c.n}세대</b></div>`).join('')}${reg?'':nxb('s6.complex','단지메이트 2단지 등록',1,'dk sm')}</div>
+  <div class="asec"><h4>서비스 켜기 · 끄기</h4>${[['noise','층간소음 중재'],['smoke','층간흡연 중재'],['parking','이중주차 호출']].map(([k,n])=>`<div class="arow"><span>${n}</span><button type="button" class="tog${nxt==='svc'&&k==='parking'?' nx':''}" aria-pressed="${S.services[k]}" aria-label="${n}" data-act="s6.svc:${k}"></button></div>`).join('')}</div>
+  <div class="asec"><h4>패키지 구독 · 세대 수 기준</h4>${['apt','hfc'].map(k=>`<div class="arow"><span>${PKG[k].n}<br><small>${PKG[k].sc} · <b>${S.pkg[k]?'구독 중':'미구독'}</b></small></span><button type="button" class="tog${nxt==='sub'&&k==='hfc'?' nx':''}" aria-pressed="${S.pkg[k]}" aria-label="${PKG[k].n}" data-act="s6.pkg:${k}"></button></div>`).join('')}<p class="pnote">주민 앱과 로봇에는 단지가 산 패키지만 보여요</p></div>
+  <div class="asec"><h4>기기 상태</h4><div class="arow"><span>로봇 ${R.length}대</span><b>${R.length-off.length}대 온라인</b></div>${off.map(x=>`<div class="arow"><span>${x.id}호 오프라인</span>${nxb('s6.fix:'+x.id,'다시 연결',nxt==='dev'&&x===off[0],'ghost sm')}</div>`).join('')}</div>`;
+ const office=s6.moved?'<p class="pok">1104호 정리 완료</p><p class="pnote">얼굴 · 목소리 특징값, 생활 기록, 소음 이벤트를 지웠어요</p>':`<div class="arow"><span>1104호 · 11/30 이사</span><b>정리 대기</b></div>${nxb('s6.moveout','이사 세대 정리',nxt==='move','dk sm')}`;
+ return dAdmin('플랫폼 운영자',ops,1)+dAdmin('관리사무소 · 이사 세대',office);
+}
+function dPre(){
+ const s=st(4);
+ const chat=s.out.slice().reverse().map(o=>({who:'bot',t:o.t,sub:o.at}));
+ const did=S.prog[4];
+ const ctl=nxb('d.pre:1','21:05 · 저녁 놀이 시간',!did.has(0),'ghost')+nxb('d.pre:2','22:40 · 아이가 뛰었어요',did.has(0)&&!did.has(1),'ghost');
+ const app=`<div class="ptitle">우리 집 소음 알림</div>${s.out.length?s.out.map(o=>`<div class="arow"><span>${esc(o.t)}</span><b>${o.at}</b></div>`).join(''):'<p class="pnote">아직 알림 없음</p>'}<p class="pnote">아랫집 취침 ${S.H['703'].sleep} · 야간 기준 34dB</p>`;
+ return dRobot('803호 로봇 · 우리 집',did.size>0&&s.out.length>0,chat,ctl)+dPhone('803호 앱',app);
+}
+function dOffice(type,warnAct,warnLabel){
+ const rs=S.reports.filter(r=>r.type===type);if(!rs.length)return '';
+ const body=rs.map(r=>`<div class="arow"><span>${r.kind==='report'?'정식 신고':'기록'} · ${r.to==='미확인'||r.to==='미등록 차량'?esc(r.to):r.to+'호'}</span><b>${r.kind==='report'?r.n+'회':r.line?'공동 안내':'조치 없음'}</b></div>${r.kind==='report'?`<p class="pnote">첨부 기록: ${r.evid.map(esc).join(', ')}<br>근거: ${LAW[type]}</p>${r.sent?'<p class="pok">'+warnLabel+' 보냄</p>':nxb(warnAct,warnLabel+' 보내기',1,'dk')}`:`<p class="pnote">${esc(r.reason)}</p>${lineBtn(r,1)}`}`).join('');
+ return dAdmin('관리사무소 · 신고함',body);
+}
+function dNoise(){
+ const s=st(1),ph=!s.chat.length?0:s.busy?1:2;
+ const ev=noiseEvents(s.time,s.case),mine=ev.find(e=>e.unit==='803'),{limit}=limitOf(mine.t);
+ const ctl=ph===0?nxb('d.noise','말하기',1)+(CAP.mic?nxb('d.noisevoice',VOICE.on?'듣는 중…':'음성으로 말하기',0,'ghost'):''):s.pending?nxb('s2.send:1','응, 보내 줘',1)+nxb('s2.send:0','보내지 마',0,'ghost'):s.suggest?nxb('s2.file','응, 신고해 줘',1,'dk'):s.extAsk?extBtns('noise',1):'';
+ const fl=s.lv?`윗집 확인 · ${LV[s.lv]}`:'윗집 확인';
+ const app=s.ext?`${tl({a:'done',b:'done',c:'done'},[['a','윗집에 전달 · 답장'],['b','관리사무소 정식 신고 · 권고'],['c','권고 뒤에도 반복']])}${extCard('noise')}`:`<div class="ptitle">신고 처리 상태</div>${tl(s.status,[['in','접수'],['find',fl],['lim','소음 기준 확인'],['send','확인 후 전달'],['reply','답장'],['esc','관리사무소 신고 · 기록']])}${s.status.lim?`<p class="pnote">측정 ${mine.db}dB · 기준 ${limit}dB</p>`:''}${s.pending?`<div class="pmsg"><small class="pnote">보낼 메시지</small><br>${esc(s.pending.text)}</div>`:''}${s.reply&&s.lv==='sure'&&!s.suggest&&!s.filed?nxb('s2.repeat','또 시끄러워요',1,'ghost sm'):''}${s.filed&&!s.ext?'<p class="pok">관리사무소에 정식 신고했어요</p>':''}${s.official&&!s.extAsk&&!s.ext?nxb('n.after','권고 뒤에도 또 시끄러워요',1,'ghost sm'):''}${extCard('noise')}`;
+ const wall=s.msg?`<div class="msgc"><small>${s.lv==='guess'?'이웃 세대 안내':'이웃 세대에서 온 메시지'}</small>${esc(s.msg.text)}</div>${s.reply?`<div class="rep">답장 보냄: ${esc(s.reply)}</div>`:`<div class="ropts">${R2.map((r,i)=>nxb('d.noisereply:'+i,esc(r),i===0,'ghost sm')).join('')}</div>`}${s.official?`<div class="msgc off"><small>관리사무소 공지</small>${esc(s.official)}</div>`:''}`:s.lineMsg?`<div class="msgc off"><small>관리사무소 공동 안내 · ${LINE_LAB('noise')}</small>${esc(s.lineMsg)}</div>`:`<p class="clk">${s.time}</p><p class="idl">새 메시지 없음</p>`;
+ return dRobot('803호 로봇 · 아랫집',ph===1,s.chat,ctl)+dPhone('803호 앱',app)+dWall(`${s.src||'903'}호`,s.time,wall)+dOffice('noise','s2.warn','중단 권고');
+}
+function dSmoke(){
+ const s=st(2);
+ const ctl=!s.chat.length?nxb('d.smoke','연기 감지',1):s.ask?nxb('s3.ask:1','응, 알려 줘',1)+nxb('s3.ask:0','기록만 해 줘',0,'ghost'):s.suggest?nxb('s3.file','응, 신고해 줘',1,'dk'):s.extAsk?extBtns('smoke',1):s.official&&!s.ext?nxb('s.after','또 연기가 들어와요',1,'ghost'):'';
+ let line='';
+ if(s.extAsk||s.ext)line=dPhone('803호 앱',s.ext?extCard('smoke'):'<div class="ptitle">외부 기관 신고</div><p class="pnote">세대 안 흡연 · 관리사무소 권고 뒤 반복</p>');
+ else if(s.lv){
+  const c=SMOKE_CASE[s.case],j=judgeSmoke(c);
+  const row=u=>{const e=j.ev.find(x=>x.unit===u);const v=e?`${e.t.slice(0,5)}:${e.t.slice(6)} · +${e.rise}㎍/㎥`:c.off.includes(u)?'로봇 꺼짐 · 확인 못 함':'정상 · 감지 없음';const tag=u==='803'?'우리 집':j.src===u&&j.lv==='sure'?'출발':j.cand&&j.cand.includes(u)&&j.lv==='guess'?'후보':'';return `<div class="arow sl2"><span>${u}호${tag?` <em>${tag}</em>`:''}</span><b>${v}</b></div>`};
+  line=dAdmin('03라인 공기 센서 대조',['803','703','603','503'].map(row).join('')+`<p class="pnote">PM2.5가 평소보다 ${RISE}㎍/㎥ 넘게 오르면 감지. 연기는 위로 올라가서 가장 아래, 가장 먼저 잡힌 집이 출발점</p><p class="${s.lv==='sure'?'pok':'pnote'}"><b>${LV[s.lv]}</b> · ${s.lv==='sure'?j.src+'호 한 집에만 전달':s.lv==='guess'?j.cand.join(', ')+'호에 같은 안내':'아무 집에도 보내지 않고 기록만'}</p>`);
+ }
+ const wall=`${s.msg?`<div class="msgc"><small>${s.lv==='guess'?'같은 라인 공동 안내':'이웃 세대에서 온 메시지'}</small>${esc(s.msg)}</div>`:'<p class="clk">21:12</p><p class="idl">새 메시지 없음</p>'}${s.official?`<div class="msgc off"><small>관리사무소 공지</small>${esc(s.official)}</div>`:''}`;
+ return dRobot('803호 로봇 · 연기 들어온 집',s.busy||s.ask,s.chat,ctl)+line+(s.lv&&s.lv!=='unsure'?dWall(`${s.to.join(' · ')}호`,'21:13',wall):s.lineMsg?dWall(`${LINE_LAB('smoke')} 세대`,'21:20',`<div class="msgc off"><small>관리사무소 공동 안내</small>${esc(s.lineMsg)}</div>`):'')+dOffice('smoke','d.smokewarn','중단 권고');
+}
+function dParking(){
+ const s=st(3);
+ const fl=s.lv?`차주 확인 · ${s.via?'주민 확인 후 확정':LV[s.lv]}`:'차주 확인';
+ const app=s.status.call?`<div class="ptitle">이동 요청</div><p class="pbig">${esc(s.plate)}</p>${tl(s.status,[['call','요청 접수'],['find',fl],['send','차주에게 전달'],['reply','차주 답장']])}${s.ask?`<div class="pmsg">등록된 번호가 없어요. 혹시 <b>${pretty(s.ask.v)}</b> 차량인가요?</div>${nxb('s4.confirm:1','맞아요',1)}${nxb('s4.confirm:0','아니에요',0,'ghost')}`:''}${s.lv==='unsure'?'<p class="pnote">등록 차량이 아니라 관리사무소에 넘겼어요. 방문 차량 기록으로 연락해요.</p>':''}${s.reply?`<p class="pok">${esc(s.reply.t)} ${s.reply.eta}까지 이동 예정</p>`:s.req&&!s.late?nxb('s4.late','10분째 답이 없어요',0,'ghost sm'):''}${s.late?'<p class="pnote">관리사무소에 넘겼어요. 경비실이 차주에게 직접 연락해요.</p>':''}${s.suggest&&(s.reply||s.late)?`<div class="pmsg">같은 차량이 최근 한 달 ${s.n}번째예요. 관리사무소에 정식 신고할까요?</div>${nxb('s4.file','정식 신고',1,'dk')}`:''}${s.filed?'<p class="pok">관리사무소에 정식 신고했어요</p>':''}`
+  :`<div class="ptitle">이중주차 이동 요청</div><label class="plb">앞차 번호<input data-bind="3.plate" value="${esc(s.plate)}"></label><label class="plb">메모<input data-bind="3.memo" value="${esc(s.memo)}"></label>${nxb('d.park','이동 요청',1)}`;
+ const own=s.req?`<div class="ptitle">이웃 요청</div><div class="pmsg">${esc(s.req)}</div>${s.reply?'<p class="pok">답장 보냄</p>':s.late?'':`<div class="ropts">${R4.map(([t],i)=>nxb('d.parkreply:'+i,esc(t),i===0,'ghost sm')).join('')}</div>`}${s.official?`<div class="pmsg"><small class="pnote">관리사무소 공지</small><br>${esc(s.official)}</div>`:''}`:'<p class="pnote">새 알림 없음</p>';
+ return dPhone('803호 앱 · 07:55',app)+(s.lv==='unsure'?'':dPhone(`${s.owner||'1203'}호 앱 · 차주`,own))+dOffice('parking','s4.warn','주차 규정 안내');
+}
+function dHealth(){
+ const solo=DEMO.sub.health==='solo',n=solo?8:7,s=st(n),m=s.med;
+ const askMed=m.st==='asked1'||m.st==='asked2';
+ let ctl=nxb(`f.med:${n}:time`,`${hm(m.at)} 복용 시각`,m.st==='idle','ghost sm');
+ if(askMed)ctl+=nxb(`f.med:${n}:taken`,'네, 먹었어요',1,'sm')+nxb(`f.med:${n}:noreply`,'답 없이 10분',0,'ghost sm');
+ if(!solo){
+  if(s.sos==='ask')ctl+=nxb('f.sos:yes','119에도 연락',1,'sm')+nxb('f.sos:no','아니요',0,'ghost sm');
+  ctl+=nxb('f.book','병원 예약',0,'ghost sm')+nxb('f.sched','일정 보기',0,'ghost sm')+nxb('f.photo','손주 생일 D-4',0,'ghost sm')+nxb('f.sos:call','도와줘',0,'ghost sm');
+ }else{
+  ctl+=`<button type="button" class="btn ghost sm" data-act="f.feel" data-q="아, 오늘 진짜 너무 힘들다. 완전 지쳤어">지친 말투</button><button type="button" class="btn ghost sm" data-act="f.feel" data-q="오늘은 그냥 괜찮았어">괜찮은 말투</button>`+nxb('f.facefeel','카메라로 표정 보기',0,'sm')+nxb('f.home','고향 생각',0,'ghost sm')+nxb('f.food','음식 추천',0,'ghost sm')+nxb('f.leisure','주말 제안',0,'ghost sm');
+ }
+ const robot=dRobot(solo?'803호 로봇 · 혼자 사는 집':'803호 로봇 · 할머니와 손주',askMed||s.sos==='ask',s.chat,ctl);
+ let app=`<div class="ptitle">${solo?'내 휴대폰':'자녀 앱'}</div><ul class="list"><li><span>${m.name} 복용</span><b>${MED_L[m.st]}</b></li>${solo?`<li><span>감정 점수</span><b>${s.score===null?'아직 없음':s.score+'/100'}</b></li>`:''}</ul>${notiHTML(s,solo?'받은 알림':'자녀 앱 알림')}`;
+ if(!solo&&s.showSched)app+=`<ul class="list">${sortSched(s.sched).map(e=>`<li><span>${e.label} ${e.h}</span><span>${esc(e.t)}</span></li>`).join('')}</ul>`;
+ let wall=consBox(n);
+ if(!solo&&s.photos)wall+=s.photos.map(p=>`<div class="pmsg"><b>${esc(p.t)}</b><br><small>${p.d}</small></div>`).join('');
+ return robot+dPhone(solo?'내 휴대폰':'자녀 앱 · 보호자',app)+dWall('803호','21:00',wall);
+}
+function demoRender(){
+ if(!DEMO.on)return;
+ const sub=DEMO.sub[DEMO.sc];
+ const lk=DPKG[DEMO.sc]&&!S.pkg[DPKG[DEMO.sc]]?DPKG[DEMO.sc]:null;
+ const body=lk?dAdmin('구독하지 않은 패키지',`<div class="ptitle">${PKG[lk].n}</div><p class="pnote">이 단지는 이 패키지를 구독하지 않았어요. 그래서 주민 앱과 로봇에 ${PKG[lk].sc} 기능이 보이지 않아요.</p>${nxb('demo.ops','운영자 화면에서 구독하기',1,'dk sm')}`,1):DEMO.sc==='robot'?(sub==='ops'?dOps():dRobotUse()):DEMO.sc==='noise'?(sub==='pre'?dPre():dNoise()):{smoke:dSmoke,parking:dParking,health:dHealth}[DEMO.sc]();
+ const hasCase=CASES[DEMO.sc]&&!(DEMO.sc==='noise'&&sub==='pre');
+ const sb=DSUB[DEMO.sc]?DSUB[DEMO.sc].map(([k,n],j)=>`<button type="button" aria-pressed="${sub===k}" data-act="demo.sub:${k}">${j+1}. ${n}</button>`).join(''):'';
+ const cs=hasCase?`${sb?'<span class="dsep"></span>':''}<span class="dlab">판별</span>${CASES[DEMO.sc].map(([k,n])=>`<button type="button" class="dcase" aria-pressed="${DEMO.case[DEMO.sc]===k}" data-act="demo.case:${k}">${n}</button>`).join('')}`:'';
+ const subs=sb||cs?`<div class="dsub">${sb}${cs}</div>`:'<div></div>';
+ $('#present').innerHTML=`<div class="pbar"><div style="display:flex;align-items:center;gap:22px;flex-wrap:wrap"><b>단지메이트</b><div class="dtabs">${DSC.map(([k,n])=>`<button type="button" aria-pressed="${DEMO.sc===k}" data-act="demo.sc:${k}">${n}${DPKG[k]&&!S.pkg[DPKG[k]]?' · 미구독':''}</button>`).join('')}</div></div><div class="pctl"><button type="button" class="btn ghost sm" data-act="demo.reset">처음부터</button><button type="button" class="btn ghost sm" data-act="demo.close">상세 화면</button></div></div>${subs}<div class="pstage d">${body}</div>`;
+ document.querySelectorAll('#present .pbub').forEach(c=>c.scrollTop=c.scrollHeight);
+}
+function demoReset(){
+ const k=DEMO.sc;
+ const sb=DEMO.sub[k];
+ if(k==='robot'&&sb==='home'){resetScn(0);if(FACE.open)camClose()}
+ if(k==='robot'&&sb==='ops'){resetScn(5);S.services={noise:true,smoke:true,parking:true};S.H['1002'].online=false;S.H['404'].online=false;Object.assign(S.H['1104'],{registered:true,robot:true,moving:true})}
+ if(k==='noise'&&sb==='report'){resetScn(1);st(1).case=DEMO.case.noise;S.reports=S.reports.filter(r=>r.type!=='noise');S.hist['803|903|noise']=1}
+ if(k==='noise'&&sb==='pre')resetScn(4);
+ if(k==='smoke'){resetScn(2);st(2).case=DEMO.case.smoke;S.reports=S.reports.filter(r=>r.type!=='smoke');S.hist['603|smoke']=2}
+ if(k==='health'){const n=sb==='solo'?8:7;resetScn(n)}
+ if(k==='parking'){resetScn(3);const c=DEMO.case.parking;Object.assign(st(3),{case:c,plate:{sure:'12가 3456',guess:'12가 3486',unsure:'99라 0000'}[c]});S.reports=S.reports.filter(r=>r.type!=='parking');S.hist['1203|parking']=2}
+ render();
+}
+async function demoFace(){
+ const s0=st(0),h=H8(),i=h.members.findIndex((_,j)=>!s0.faces[j]);if(i<0)return;
+ if(CAP.face&&CAP.cam&&!CAP.camBlocked){await s1FaceReal(i);if(!s0.faces[i]&&CAP.camBlocked){s0.err='';s1Face(i)}}else s1Face(i);
+}
+function demoOpen(){DEMO.on=true;document.body.classList.add('demo');$('#present').hidden=false;render()}
+function demoClose(){DEMO.on=false;document.body.classList.remove('demo');$('#present').hidden=true;render()}
+
+/* ---------- 공통 렌더 ---------- */
+const KIND={robot:'로봇',wall:'월패드',app:'모바일 앱',office:'관리사무소',ops:'운영자 콘솔'};
+function dev(kind,title,sub,body){return `<article class="dev ${kind}"><header><span class="k">${KIND[kind]}</span><b>${esc(title)}</b><small style="margin-left:auto;opacity:.7">${esc(sub)}</small></header><div class="db">${body}</div></article>`}
+function renderMeters(){
+ const f=S.cover.size,t=S.tech.size;
+ $('#meters').innerHTML=capsHTML()+`<div class="meter"><b>MVP 기능 동작 <em>${f}/${FEAT.length}</em></b><div class="bar"><i style="width:${f/FEAT.length*100}%"></i></div></div><div class="meter"><b>교수님 기술 사용 <em>${t}/12</em></b><div class="bar"><i style="width:${t/12*100}%"></i></div></div>`;
+ $('#cov').innerHTML=`<h3>기능 ${FEAT.length}개</h3><div class="cg">${FEAT.map(([n,l])=>`<span class="${S.cover.has(n)?'on':''}">${pad(n)} ${l}</span>`).join('')}</div><h3>교수님 기술 12개</h3><div class="cg">${TECH.map(x=>`<span class="${S.tech.has(x)?'on':''}">${x}</span>`).join('')}</div>`;
+}
+function renderLog(){
+ $('#log').innerHTML=S.log.length?S.log.map(e=>`<li class="L${e.l}"><span class="lb">${LY[e.l-1]}</span><div><b>${esc(e.c)}</b><span class="tag ${e.tag}">${e.tag==='real'?'실제 로직':'예시'}</span><p>${esc(e.m)}</p></div></li>`).join(''):'<li class="logempty" style="display:block;background:none">시나리오를 진행하면 어느 층의 어떤 클래스가 처리했는지 여기에 쌓여요.</li>';
+}
+function renderBld(){
+ const m=S.marks[cur];let h='<div class="roof"></div>';
+ for(let f=TOP;f>=BOT;f--){h+=`<div class="fl"><span class="fn">${f}층</span>`;for(const l of LINES){const id=`${f}${l}`,x=S.H[id];let c=m[id]||'';if(!c&&id==='803'&&x.registered)c='me';if(!x.registered&&!c)c='empty';h+=`<button type="button" class="cell ${c}" data-act="unit:${id}" aria-label="${id}호">${id}${x.registered&&x.robot?`<i class="dot${x.online?'':' off'}"></i>`:''}</button>`}h+='</div>'}
+ $('#bld').innerHTML=h+'<div class="ground"></div>';
+ if(S.sel)showUnit(S.sel,true);
+}
+function showUnit(id,quiet){
+ S.sel=id;const x=S.H[id];const K={noise:'소음',smoke:'흡연',parking:'주차',health:'건강',album:'앨범'};
+ $('#uinfo').innerHTML=!x.registered?`<b>${id}호</b><p>${id==='803'?'아직 등록 전 (시나리오 1)':'등록된 세대 없음'}</p>`:`<b>${id}호${id==='803'?' · 우리 집':''}</b><p>로봇 ${x.robot?(x.online?'연결, 온라인':'연결, 오프라인'):'없음'}</p><p>동의: ${Object.keys(K).filter(k=>x.consent[k]).map(k=>K[k]).join(', ')||'없음'}</p><p>알림: ${x.notify.map(k=>DEV[k]).join(', ')}</p><p>세대 사정: ${x.kids?'아이 있음, ':''}취침 ${x.sleep}${x.moving?', 이사 예정':''}</p>${x.vehicles.length?`<p>차량: ${x.vehicles.map(pretty).join(', ')}</p>`:''}`;
+}
+function render(){
+ const ti=tabOf(cur),T=TABS[ti],s=SCN[cur],mv=cur===6;
+ $('#tabs').innerHTML=TABS.map((t,i)=>`<button type="button" class="tab${i>0&&t.parts.every(p=>S.prog[p].size>=SCN[p].steps.length)?' done':''}" role="tab" aria-selected="${i===ti}" data-act="tab:${i}"><small>${t.k}</small>${t.t}${i===2?'<em class="core">MVP 흐름</em>':''}${t.pkg&&!S.pkg[t.pkg]?'<em class="core lock">미구독</em>':''}</button>`).join('');
+ const parts=T.parts.length>1?`<div class="seg" role="group" aria-label="장면">${T.parts.map((p,j)=>`<button type="button" aria-pressed="${p===cur}" data-act="go:${p}">${j+1}. ${SCN[p].t}</button>`).join('')}</div>`:'';
+ $('#shead').innerHTML=`<h2>${mv?'MVP. '+s.t:'시나리오 '+T.k+'. '+T.t}</h2><p>${mv?s.d:(T.d?T.d+' ':'')+(T.parts.length>1?'':s.d)}</p>${parts}${T.parts.length>1?`<p>${s.d}</p>`:''}<div class="steps">${s.steps.map((x,i)=>`<span class="step${S.prog[cur].has(i)?' on':''}">${x}</span>`).join('')}</div><div class="meta">${mv?'':`<span class="role ${T.role[0]}">${T.role[1]}</span>`}<span class="pill">기능 ${s.f.map(pad).join(', ')}</span>${!mv&&T.pkg?`<span class="pill">${PKG[T.pkg].n}</span>`:''}<span class="pill">${mv?s.uc:T.uc}</span><span style="flex:1"></span><div class="ctrl"><button type="button" class="btn dk sm" data-act="auto"${autoOn?' disabled':''}>${autoOn?'시연 중…':mv?'가상 주민 20건 돌려보기':'자동 시연'}</button><button type="button" class="btn ghost sm" data-act="reset">${mv?'측정값 지우기':'이 장면 처음부터'}</button></div></div>`;
+ $('#screens').innerHTML=lockedPkg(cur)?lockHTML(lockedPkg(cur)):[scr1,scr2,scr3,scr4,scr5,scr6,scrMVP,scrFam,scrSolo][cur]();
+ renderBld();renderMeters();renderLog();
+ document.querySelectorAll('.chat').forEach(c=>c.scrollTop=c.scrollHeight);
+ if(DEMO.on)demoRender();
+}
+const AUTO=[
+ [()=>s1Submit(),()=>s1Approve(),()=>s1Pair(st(0).pair),()=>s1Face(0),()=>s1Face(1),()=>s1Face(2),()=>s1Consent(),()=>s1Notify()],
+ [()=>s2Report(),()=>s2Send(true),()=>s2Reply(0),()=>s2Repeat(),()=>s2File(),()=>s2Warn(),()=>extOffer('noise'),()=>extFile('noise','center')],
+ [()=>s3Detect(),()=>s3Ask(true),()=>s3File(),()=>s3Warn(),()=>extOffer('smoke'),()=>extFile('smoke','legal')],
+ [()=>s4Call(),()=>s4Reply(0),()=>s4File(),()=>s4Warn()],
+ [()=>{Object.assign(st(4),{t:21*60+5,db:30});s5Check()},()=>{Object.assign(st(4),{t:22*60+40,db:44});s5Check()}],
+ [()=>s6Say('단지야, 오늘 날씨 어때?'),()=>s6Say('단지야, 분리수거 언제야?'),()=>{st(5).tab='complex';render();s6Complex()},()=>{st(5).tab='sub';s6Pkg('hfc',true)},()=>{st(5).tab='dev';s6Fix('1002')},()=>s6MoveOut()],
+ [()=>simulate(20)],
+ [()=>{const h=H8();if(!h.consent.health)setCons(7,'health');if(!h.consent.album)setCons(7,'album')},()=>medStep(7,'time'),()=>medStep(7,'noreply'),()=>medStep(7,'noreply'),()=>famBook(),()=>famSched(),()=>famPhoto(),()=>famSos('call'),()=>famSos('no')],
+ [()=>{const h=H8();if(!h.consent.health)setCons(8,'health')},()=>medStep(8,'time'),()=>medStep(8,'taken'),()=>soloFeel('아, 오늘 진짜 너무 힘들다. 완전 지쳤어'),()=>soloHome(),()=>soloFood(),()=>soloLeisure()]
+];
+async function autoplay(){
+ if(autoOn||lockedPkg(cur))return;const ti=tabOf(cur),parts=TABS[ti].parts;autoOn=true;
+ for(const n of parts){
+  if(tabOf(cur)!==ti)break;cur=n;if(n!==6)resetScn(n);render();await sleep(300);
+  for(const fn of AUTO[n]){if(cur!==n)break;await fn();await sleep(900)}
+ }
+ autoOn=false;render();
+}
+function act(a,el){
+ const i=a.indexOf(':'),k=i<0?a:a.slice(0,i),v=i<0?'':a.slice(i+1);
+ const F={tab:()=>{const T=TABS[+v];cur=T.parts[T.parts.length-1];if(+v===1||T.first)cur=T.parts[0];render()},go:()=>{cur=+v;render()},reset:()=>{resetScn(cur);render()},auto:autoplay,unit:()=>showUnit(v),
+  's1.submit':s1Submit,'s1.approve':s1Approve,'s1.pair':()=>s1Pair(),'s1.face':()=>s1Face(+v),'s1.consent':s1Consent,'s1.notify':s1Notify,
+  's2.report':s2Report,'s2.reply':()=>s2Reply(+v),'s2.repeat':s2Repeat,'s2.send':()=>s2Send(v!=='0'),'s2.file':s2File,'s2.warn':s2Warn,'o.line':()=>lineNotice(v),'s3.detect':s3Detect,'s3.ask':()=>s3Ask(v==='1'),'s3.file':s3File,'s3.warn':s3Warn,'s4.call':s4Call,'s4.reply':()=>s4Reply(+v),'s4.confirm':()=>s4Confirm(v==='1'),'s4.late':s4Late,'s4.file':s4File,'s4.warn':s4Warn,'demo.case':()=>{DEMO.case[DEMO.sc]=v;demoReset()},'ext':()=>{const [t,k]=v.split(':');extFile(t,k)},'n.after':()=>extOffer('noise'),'s.after':()=>extOffer('smoke'),
+  's5.check':s5Check,'pkg.open':()=>{st(5).tab='sub';cur=5;render()},'f.cons':()=>{const [n,k]=v.split(':');setCons(+n,k)},'f.med':()=>{const [n,e]=v.split(':');medStep(+n,e)},'f.book':famBook,'f.sched':famSched,'f.photo':famPhoto,'f.sos':()=>famSos(v),'f.feel':()=>soloFeel(el.dataset.q||$('#s8q')?.value),'f.facefeel':soloFaceFeel,'f.home':soloHome,'f.food':soloFood,'f.leisure':soloLeisure,'s6.say':()=>s6Say(el.dataset.q),'s6.send':()=>s6Say($('#s6q')?.value),'s6.tab':()=>{st(5).tab=v;render()},
+  's6.complex':s6Complex,'s6.svc':()=>s6Svc(v),'s6.pkg':()=>s6Pkg(v),'s6.fix':()=>s6Fix(v),'s6.moveout':s6MoveOut,'mvp.sim':()=>simulate(20),'bt.find':btFind,'cam.close':camClose,'s1.facecam':()=>s1FaceReal(+v),'face.who':()=>faceWho(+v),'voice':()=>voiceStart(+v),'demo.open':demoOpen,'demo.close':demoClose,'demo.reset':demoReset,'demo.sc':()=>{DEMO.sc=v;render()},'demo.ops':()=>{DEMO.sc='robot';DEMO.sub.robot='ops';render()},'demo.sub':()=>{DEMO.sub[DEMO.sc]=v;render()},'d.pre':()=>{const s=st(4);if(v==='1')Object.assign(s,{t:21*60+5,db:30});else Object.assign(s,{t:22*60+40,db:44});s5Check()},'d.r.submit':s1Submit,'d.r.approve':s1Approve,'d.r.pair':()=>s1Pair(st(0).pair),'d.r.face':demoFace,'d.noise':s2Report,'d.noisevoice':()=>voiceStart(1),'d.noisereply':()=>s2Reply(+v),'d.smoke':s3Detect,'d.smokewarn':s3Warn,'d.park':s4Call,'d.parkreply':()=>s4Reply(+v)};
+ if(F[k])F[k]();
+}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(b&&!b.disabled)act(b.dataset.act,b)});
+document.addEventListener('input',e=>{
+ const t=e.target,b=t.dataset.bind;if(!b)return;
+ const [o,k]=b.split('.');const val=t.type==='checkbox'?t.checked:t.type==='range'||t.tagName==='SELECT'&&/^\d+$/.test(t.value)&&k!=='time'?+t.value:t.value;
+ if(o==='root'){S[k]=val;const out=t.closest('label')?.querySelector('output');if(out)out.textContent=val+'회';return}
+ if(o==='T'){S.T[k]=Math.max(0,Math.min(100,+t.value||0));return}
+ S.s[+o][k]=val;
+ if(t.dataset.out){const out=$('#'+t.dataset.out);if(out)out.textContent=t.dataset.fmt==='hm'?hm(val):val+'dB'}
+});
+document.addEventListener('change',async e=>{
+ const t=e.target;
+ if(t.dataset.faceReg!==undefined&&t.files&&t.files[0]){const i=+t.dataset.faceReg,cur=await faceFromFile(t.files[0]);if(!cur){st(0).err='사진에서 얼굴을 못 찾았어요. 정면 사진으로 다시 해 주세요.';render();return}enroll(i,cur,'사진으로 등록');return}
+ if(t.dataset.faceWho!==undefined&&t.files&&t.files[0]){applyWho(+t.dataset.faceWho,await faceFromFile(t.files[0]));return}
+ if((t.dataset.bind||'').startsWith('T.'))setTimeout(render,0)});
+document.addEventListener('keydown',e=>{
+ if(DEMO.on&&e.key==='Escape'){demoClose();return}
+ if(e.key==='Enter'&&e.target.id==='s6q'){e.preventDefault();act('s6.send',e.target)}});
+reset();render();demoOpen();
+}
+</script>
+</body>
+</html>
