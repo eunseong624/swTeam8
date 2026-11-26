@@ -26,6 +26,7 @@ while ($listener.IsListening) {
   try { $ctx = $listener.GetContext() } catch { break }
   $res = $ctx.Response
   try {
+    # one broken request (reload, closed tab) must never stop the server
     $rel = [Uri]::UnescapeDataString($ctx.Request.Url.AbsolutePath).TrimStart('/')
     if ($rel -eq '' -or $rel.EndsWith('/')) { $rel = $rel + 'index.html' }
     $full = [IO.Path]::GetFullPath((Join-Path $root $rel))
@@ -36,6 +37,6 @@ while ($listener.IsListening) {
       $res.ContentLength64 = $bytes.Length
       $res.OutputStream.Write($bytes, 0, $bytes.Length)
     } else { $res.StatusCode = 404 }
-  } catch { $res.StatusCode = 500 }
-  finally { $res.OutputStream.Close() }
+  } catch { try { $res.StatusCode = 500 } catch {} }
+  finally { try { $res.OutputStream.Close() } catch {} }
 }
